@@ -1,5 +1,5 @@
 /**
- * ws.ts — WebSocket 服务器：事件流广播 + 确认应答 + 取消
+ * ws.ts — WebSocket 服务器：事件流广播 + 客户端事件处理
  *
  * 鉴权：握手时校验 `Authorization: Bearer <token>` 或查询参数 `?token=`。
  * 断开连接：与该客户端相关的 pending 审批全部置为拒绝（否则 turn 卡死）。
@@ -8,17 +8,20 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
 import type { AgentBridge } from "./agent.js";
 import type { ApprovalRegistry } from "./approval.js";
+import type { KairoSessionManager } from "./session-manager.js";
 import type { WsClientEvent } from "./ws-types.js";
+import { handleClientEvent } from "./client-rpc.js";
 
 export interface WsServerDeps {
   httpServer: Server;
   token: string;
   approvals: ApprovalRegistry;
   agent: AgentBridge;
+  sessions: KairoSessionManager;
 }
 
 export function startWsServer(deps: WsServerDeps): WebSocketServer {
-  const { httpServer, token, approvals, agent } = deps;
+  const { httpServer, token, approvals, agent, sessions } = deps;
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", (req, socket, head) => {
@@ -42,6 +45,7 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
   wss.on("connection", (ws) => {
     // 补发状态快照
     ws.send(JSON.stringify({ type: "status", status: agent.status() }));
+    void sessions.list().then((list) => ws.send(JSON.stringify({ type: "session_list", sessions: list })));
 
     ws.on("message", (raw) => {
       let msg: WsClientEvent;
@@ -50,15 +54,9 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
       } catch {
         return;
       }
-      switch (msg.type) {
-        case "approve":
-        case "reject":
-          approvals.respond(msg.id, msg.type === "approve");
-          break;
-        case "cancel":
-          void agent.abort();
-          break;
-      }
+      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: (ev) => sendTo(ws, ev) }).catch(
+        (err) => console.error("[ws] 客户端事件处理失败:", err),
+      );
     });
 
     ws.on("close", () => {
@@ -74,4 +72,10 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
   });
 
   return wss;
+}
+
+function sendTo(ws: WebSocket, event: unknown): void {
+  if (ws.readyState === 1 /* OPEN */) {
+    ws.send(JSON.stringify(event));
+  }
 }

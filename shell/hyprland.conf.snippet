@@ -1,0 +1,10 @@
+# kairo — 追加到 ~/.config/hypr/hyprland.conf 的片段（install.sh 自动写入，可手动复制）
+
+# 桌面启动时拉起 kairo 浮窗进程（默认隐藏，Super+A 唤起）
+exec-once = /home/liborui/Documents/kairo/scripts/toggle-kairo.sh --start-safe
+
+# 唤起/隐藏浮窗
+bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
+
+# 可选：kairo 浮窗以普通层窗口显示时强制浮动（使用 PanelWindow 时无需此规则）
+# windowrulev2 = float, class:^(org.quickshell)$, title:^(kairo)$

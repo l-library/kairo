@@ -6,7 +6,14 @@
 export type WsClientEvent =
   | { type: "approve"; id: string }
   | { type: "reject"; id: string }
-  | { type: "cancel" };
+  | { type: "cancel" }
+  // 面板控制（panel-socket 与 WS 共用同一事件族）
+  | { type: "prompt"; message: string }
+  | { type: "mode"; mode: "chat" | "command" }
+  | { type: "sessions_new"; name?: string }
+  | { type: "sessions_activate"; id: string }
+  | { type: "sessions_delete"; id: string }
+  | { type: "get_status" };
 
 /** 服务端 → 客户端 */
 export type WsServerEvent =

@@ -10,6 +10,7 @@ import { AgentBridge } from "./agent.js";
 import { KairoSessionManager } from "./session-manager.js";
 import { startHttpApi } from "./http.js";
 import { startWsServer } from "./ws.js";
+import { startPanelSocket, type PanelSocketHandle } from "./panel-socket.js";
 import type { KairoMode } from "./modes.js";
 import type { WsServerEvent } from "./ws-types.js";
 
@@ -33,15 +34,18 @@ function persistMode(mode: KairoMode): void {
 }
 const savedMode: KairoMode = readSettings().defaultMode === "chat" ? "chat" : "command";
 
-// --- 确认门注册表 + WS 事件桥 ---
+// --- 确认门注册表 + 事件桥 ---
 const wssRef: { current: ReturnType<typeof startWsServer> | null } = { current: null };
+const panelRef: { current: PanelSocketHandle | null } = { current: null };
 const broadcast = (event: WsServerEvent): void => {
   const wss = wssRef.current;
-  if (!wss) return;
-  const data = JSON.stringify(event);
-  for (const client of wss.clients) {
-    if (client.readyState === 1) client.send(data);
+  if (wss) {
+    const data = JSON.stringify(event);
+    for (const client of wss.clients) {
+      if (client.readyState === 1) client.send(data);
+    }
   }
+  panelRef.current?.enqueue(event);
 };
 
 const approvals = new ApprovalRegistry(config, {
@@ -73,7 +77,8 @@ const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });
 const httpServer = createServer(startHttpApi({ agent, sessions, token: config.token }));
 
 async function main(): Promise<void> {
-  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent });
+  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions });
+  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions });
   await agent.start();
 
   httpServer.listen(config.port, config.host, () => {
@@ -89,6 +94,7 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) {
   process.on(sig, () => {
     console.log(`[kairo-daemon] 收到 ${sig}，退出中…`);
     agent.dispose();
+    panelRef.current?.close();
     httpServer.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
   });
