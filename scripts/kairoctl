@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# kairoctl — kairo 管理 CLI
+#   用法: kairoctl <command>
+#     status    查看 daemon 状态/模式/会话
+#     restart   重启 daemon（保留会话）
+#     logs      tail daemon 日志（journalctl）
+#     reimport  重新导入宿主 provider 配置
+#     panel     唤起/隐藏浮窗
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TOKEN_FILE="$HOME/.local/state/kairo/token"
+API="http://127.0.0.1:44811"
+
+curl_api() {
+  local path="$1"
+  curl -s -H "Authorization: Bearer $(cat "$TOKEN_FILE")" "$API$path"
+}
+
+cmd="${1:-status}"
+case "$cmd" in
+  status)
+    if [[ ! -f "$TOKEN_FILE" ]] || ! systemctl --user is-active --quiet kairo-daemon; then
+      echo "kairo-daemon 未运行（systemctl --user start kairo-daemon）"
+      exit 1
+    fi
+    curl_api /api/status | python3 -c '
+import json,sys
+s=json.load(sys.stdin)["status"]
+print(f"模式:     {s[\"mode\"]}")
+print(f"会话:     {s[\"sessionId\"]} {(\"(\"+s[\"sessionName\"]+\")\") if s.get(\"sessionName\") else \"\"}")
+print(f"流式中:   {s[\"streaming\"]}")
+print(f"待审批:   {s[\"pendingApprovals\"]}")'
+    ;;
+  restart)
+    systemctl --user restart kairo-daemon
+    echo "已重启（恢复最近会话）"
+    ;;
+  logs)
+    journalctl --user -u kairo-daemon -f "${2:+-n $2}"
+    ;;
+  reimport)
+    "$REPO_DIR/scripts/setup.sh"
+    systemctl --user restart kairo-daemon
+    ;;
+  panel)
+    "$REPO_DIR/scripts/toggle-kairo.sh"
+    ;;
+  *)
+    echo "用法: kairoctl <status|restart|logs|reimport|panel>" >&2
+    exit 1
+    ;;
+esac

@@ -69,6 +69,17 @@ PanelWindow {
     function isVisible(): bool {
       return panel.visible
     }
+
+    function getDebugInfo(): string {
+      return JSON.stringify({
+        connected: client.connected,
+        mode: client.mode,
+        sessionId: client.sessionId,
+        sessionCount: client.sessions.length,
+        streaming: client.streaming,
+        pendingApproval: client.pendingApproval ? client.pendingApproval.id : null,
+      })
+    }
   }
 
   Component.onCompleted: {

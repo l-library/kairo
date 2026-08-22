@@ -137,6 +137,19 @@ Item {
     }
   }
 
+  // ---- 断线重连（2s 间隔 + 上限） ----
+  property int reconnectAttempts: 0
+  Timer {
+    id: reconnectTimer
+    interval: 2000
+    repeat: true
+    running: !sock.connected && client.reconnectAttempts < 30
+    onTriggered: {
+      client.reconnectAttempts++
+      if (!sock.connected) sock.connected = true // 触发重连
+    }
+  }
+
   Socket {
     id: sock
 
@@ -152,6 +165,7 @@ Item {
     onConnectionStateChanged: {
       client.connected = sock.connected
       if (sock.connected) {
+        client.reconnectAttempts = 0
         // 连接成功：请求当前状态
         client.send({ type: "get_status" })
       } else {
@@ -163,6 +177,8 @@ Item {
       })
     }
 
-    onError: console.log("[KairoClient] socket 错误:", error)
+    onError: (error) => {
+      if (sock.path) console.log("[KairoClient] socket 错误，2s 后重连:", error)
+    }
   }
 }

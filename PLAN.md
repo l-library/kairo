@@ -1,6 +1,6 @@
 # kairo — Hyprland 上的 PI 桌面 AI 助手 · 实现方案
 
-> 状态：规划完成，待评审。本文档汇总三轮需求问答的全部决策，作为后续开发的唯一依据。
+> 状态：**M0–M4 全部实施完成并通过验收**。本文档汇总三轮需求问答的全部决策，为后期维护的唯一依据；实施偏差见 §13。
 
 ---
 
@@ -356,7 +356,7 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 | 端口 | 44811 | 127.0.0.1 回环 |
 | 唤起键 | Super+A | hyprland bind 可改 |
 | 默认模式 | command | 持久化上次选择 |
-| 默认 cwd | `$HOME` | 工具工作目录 |
+| 默认 cwd | `~/.local/share/kairo/workdir` | 工具工作目录（中性目录，与宿主隔离，见 §5.3） |
 | 只读自动放行名单 | read/grep/find/ls（SDK 内置仅此 7 工具，见 §6.4） | 可增删 |
 | 确认超时 | 10 分钟 | 超时自动拒绝 |
 | 代码高亮 | v1 关闭（等宽+底色） | 打磨项 |
@@ -364,12 +364,33 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 
 ---
 
-## 12. 开放问题（M0/M1 中验证后关闭）
+## 12. 开放问题（均已关闭）
 
 1. ~~内联 `extensionFactories` 的 `tool_call` 钩子阻塞 + 修改入参~~ —— 已验证关闭：`{ block: true, reason, terminate }` + `event.input` 可变（`docs/extensions.md` "tool_call"）。
-2. quickshell 是否有原生 IPC（优于 DBus toggle）。
-3. QML `Text.MarkdownText`（Qt 版本）对表格/代码块的支持程度。
+2. ~~quickshell 是否有原生 IPC（优于 DBus toggle）~~ —— **已关闭**：quickshell 0.3 内置 `quickshell ipc call <target> <fn>`（`IpcHandler`，`Quickshell.Io`），toggle-kairo.sh 直接使用，无需 DBus。
+3. ~~QML `Text.MarkdownText`（Qt 版本）对表格/代码块的支持程度~~ —— **已关闭（自主实现）**：改用自带轻量 `Markdown.js` 渲染 HTML 到 `Text.RichText`（标题/代码块/列表/引用/表格/链接），Qt 版本差异不敏感。
 4. ~~diff 计算~~ —— 已关闭：主包导出 `generateDiffString` / `generateUnifiedPatch`，零依赖。
-5. SDK 嵌入模式下 `ctx.mode` / `ctx.hasUI` 的实际取值（确认门不得依赖 `ctx.ui`）。
-6. 会话显示名读写 API（`SessionManager.appendSessionInfo` 的确认与读取）。
+5. ~~SDK 嵌入模式下 `ctx.mode` / `ctx.hasUI` 的实际取值~~ —— **已关闭**：确认门完全不走 `ctx.ui`，审批 diff/命令经 WS/panel 通道转发，daemon 自建 approval 注册表驱动；`ctx.mode` 未使用。
+6. ~~会话显示名读写 API~~ —— **已关闭**：`SessionManager.appendSessionInfo(name)` 写、`getSessionName()` 读，新建会话时经 `newSession({setup})` 注入。
 7. 截图/图片输入、模型切换 UI、会话树分支、web 搜索自定义工具 —— 明确推后，不进 v1。
+
+## 13. 实施偏差（M0–M4 落地记录）
+
+| 项 | 计划 | 实施 | 原因/替代 |
+|----|------|------|----------|
+| 浮窗类型 | PopupWindow | **PanelWindow**（layer-shell，右上角 anchors，exclusiveZone 0、aboveWindows） | PopupWindow 是 xdg_popup，必须附着父窗口；独立随叫随用面板用 layer overlay 更合适 |
+| 唤起机制 | DBus toggle | **quickshell 原生 IPC**（`IpcHandler` target=kairo + `quickshell ipc call`） | 优于 DBus，见问题 #2 |
+| 面板通道 | WebSocket | **Unix domain socket**（`~/.local/state/kairo/panel.sock`，0600 权限鉴权，换行 JSON） | quickshell 的 `Socket` 是 QLocalSocket（仅本地域套接字），无 TCP/WS 能力；HTTP/WS 仍保留给脚本与测试客户端 |
+| 面板控制 API | 纯 HTTP | 面板侧复用事件通道（prompt/mode/sessions_new/activate/delete/get_status 经 `handleClientEvent` 统一处理） | 与 socket 通道一致，WS 客户端同样可用 |
+| daemon 运行 | `/usr/bin/node` | **Node ≥ 24**（pi SDK 要求；`command -v node`） | 宿主 /usr/bin/node 为 v20，undici 报错 |
+| 默认 cwd | `$HOME`（§11） | `~/.local/share/kairo/workdir` 中性目录 | 与 §5.3 隔离策略一致，§11 表格同步更正 |
+
+## 14. 里程碑状态
+
+| 里程碑 | 状态 | 验收摘要 |
+|--------|------|----------|
+| M0 技术验证 | ✅ | 3 个演示脚本：流式 / 工具链+审批门 / 模式切换（`daemon/dev-m0/`） |
+| M1 daemon 骨架 | ✅ | 15/15 协议验收（`daemon/dev-m1/`）：鉴权/流式/只读放行/审批批准落盘/拒绝不落盘/审批中 abort/会话增删改/重启恢复 |
+| M2 浮窗 + 聊天 | ✅ | 真实 Hyprland：Super+A 唤起、流式 Markdown、Socket 通道全流程 0 QML 错误 |
+| M3 Command 模式 | ✅ | bash 确认卡（命令+cwd）、edit diff 确认、拒绝不落盘、中止不卡死 4/4 |
+| M4 会话与打磨 | ✅ | systemd --user 部署、面板断线自动重连、install.sh/kairoctl/文档 |

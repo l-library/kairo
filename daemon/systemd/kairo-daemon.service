@@ -4,7 +4,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node /home/liborui/Documents/kairo/daemon/dist/main.js
+# Node ≥ 24（pi SDK 需要）；install.sh 会自动替换为系统实际路径
+ExecStart=/usr/local/bin/node /home/liborui/Documents/kairo/daemon/dist/main.js
 Environment=KAIRO_AGENT_DIR=%h/.config/kairo/agent
 Environment=KAIRO_SESSION_DIR=%h/.local/share/kairo/sessions
 Environment=KAIRO_STATE_DIR=%h/.local/state/kairo
