@@ -1,0 +1,15 @@
+[Unit]
+Description=kairo PI assistant daemon
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /home/liborui/Documents/kairo/daemon/dist/main.js
+Environment=KAIRO_AGENT_DIR=%h/.config/kairo/agent
+Environment=KAIRO_SESSION_DIR=%h/.local/share/kairo/sessions
+Environment=KAIRO_STATE_DIR=%h/.local/state/kairo
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
