@@ -5,7 +5,7 @@ import QtQuick
  */
 Item {
   id: block
-  implicitHeight: visible ? row.height + 6 : 0
+  implicitHeight: visible ? (row.height + 6 + (open ? thoughtText.implicitHeight : 0)) : 0
   width: parent.width
 
   property string text: ""
@@ -44,6 +44,7 @@ Item {
   }
 
   Text {
+    id: thoughtText
     visible: block.open
     anchors.top: row.bottom
     anchors.topMargin: 4

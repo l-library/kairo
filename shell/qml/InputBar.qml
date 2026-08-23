@@ -16,7 +16,8 @@ Item {
   signal modeRequested(string mode)
   signal abortRequested()
 
-  implicitHeight: 20 + editor.implicitHeight
+  // 真实内容高度：工具条(24) + 间距(1) + 输入框(editor.implicitHeight + 10)
+  implicitHeight: 35 + editor.implicitHeight
 
   Column {
     anchors.fill: parent

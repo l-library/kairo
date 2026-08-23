@@ -169,6 +169,7 @@ PanelWindow {
         sessionCount: client.sessions.length,
         streaming: client.streaming,
         pendingApproval: client.pendingApproval ? client.pendingApproval.id : null,
+        layout: chat.getLayoutDebug(),
       })
     }
   }

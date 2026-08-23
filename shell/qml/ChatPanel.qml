@@ -36,12 +36,13 @@ Rectangle {
   // 防抖标记
   property bool dirty: false
 
-  Column {
+  ColumnLayout {
     anchors.fill: parent
+    spacing: 0
 
     TitleBar {
       id: titleBar
-      width: parent.width
+      Layout.fillWidth: true
       theme: chat.theme
       sessionName: chat.client ? chat.client.sessionName : ""
       mode: chat.client ? chat.client.mode : "command"
@@ -53,7 +54,7 @@ Rectangle {
 
     SessionBar {
       id: sessionBar
-      width: parent.width
+      Layout.fillWidth: true
       theme: chat.theme
       sessions: chat.client ? chat.client.sessions : []
       activeSessionId: chat.client ? chat.client.sessionId : ""
@@ -62,11 +63,11 @@ Rectangle {
       onDeleteRequested: function (id) { chat.client.deleteSession(id) }
     }
 
-    // 消息流
+    // 消息流：占据剩余高度
     Rectangle {
       id: listArea
-      width: parent.width
-      height: parent.height - titleBar.height - sessionBar.height - inputBar.height
+      Layout.fillWidth: true
+      Layout.fillHeight: true
       color: "transparent"
 
       ListView {
@@ -104,7 +105,7 @@ Rectangle {
 
     InputBar {
       id: inputBar
-      width: parent.width
+      Layout.fillWidth: true
       theme: chat.theme
       mode: chat.client ? chat.client.mode : "command"
       streaming: chat.client ? chat.client.streaming : false
@@ -369,5 +370,17 @@ Rectangle {
 
   function focusEditor() {
     inputBar.focusInput()
+  }
+
+  // 布局诊断（IPC getDebugInfo 用）
+  function getLayoutDebug() {
+    return JSON.stringify({
+      window: parent ? parent.height : -1,
+      title: titleBar.height,
+      session: sessionBar.height,
+      list: listArea.height,
+      input: inputBar.height,
+      inputImplicit: inputBar.implicitHeight,
+    })
   }
 }
