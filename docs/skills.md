@@ -4,7 +4,7 @@ kairo 使用与 pi 相同的技能格式：每个技能是一个目录
 `~/.config/kairo/agent/skills/<技能名>/SKILL.md`，其中的指令会在
 **Command 模式**下被加载进模型上下文（Chat 模式为纯对话，不加载技能）。
 
-> 面板侧边栏「扩展 → 技能」可查看当前已加载的技能清单（只读）。
+> 面板侧边栏「设置 → 技能」可查看当前已加载的技能清单（只读）。
 > 目前没有“官方”技能渠道（与 pi packages 的包管理机制不同），
 > skills 生态为社区维护，安装前请评估来源可信度。
 
@@ -42,7 +42,7 @@ cp -r <源目录> ~/.config/kairo/agent/skills/<name>
 # 重启 daemon 加载新技能
 kairoctl restart
 
-# 确认已加载（应能在“扩展 → 技能”列表看到，或直接问 kairo）
+# 确认已加载（应能在“设置 → 技能”列表看到，或直接问 kairo）
 ```
 
 也可以把 SKILL.md 内容直接粘贴给 kairo（Command 模式），它会帮你写入目录。

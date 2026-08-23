@@ -7,7 +7,7 @@ import QtQuick.Layouts
  *
  * 两个标签：
  *  - 会话：纵向会话列表（命名/首条摘要/消息数、活动高亮、两步确认删除）
- *  - 扩展：技能（只读展示）+ pi 插件（列表/安装/移除）
+ *  - 设置：提供商（添加/移除）+ 技能（只读展示）+ pi 插件（列表/安装/移除）
  *
  * 注意：
  *  - 交互命中顺序：整行 MouseArea 声明在底层，删除按钮 MouseArea 在
@@ -32,7 +32,7 @@ Item {
   property var plugins: []
   property var providers: []
   property string currentProvider: ""
-  property int tab: 0 // 0=会话 1=扩展
+  property int tab: 0 // 0=会话 1=设置
   property bool open: false
   signal newSessionRequested()
   signal activateRequested(string id)
@@ -99,7 +99,7 @@ Item {
             }
           }
 
-          // 扩展 tab
+          // 设置 tab
           Rectangle {
             id: tabExt
             Layout.fillWidth: true
@@ -108,7 +108,7 @@ Item {
             color: sb.tab === 1 ? (theme ? theme.accent : "#89b4fa") : (theme ? theme.surface : "#313244")
             Text {
               anchors.centerIn: parent
-              text: "扩展 (" + (sb.skills.length + sb.plugins.length) + ")"
+              text: "设置 (" + (sb.providers.length + sb.skills.length + sb.plugins.length) + ")"
               color: sb.tab === 1 ? "#ffffff" : (theme ? theme.subtext : "#a6adc8")
               font.pixelSize: 11
               font.bold: sb.tab === 1
@@ -275,7 +275,7 @@ Item {
         }
       }
 
-      // ================= 标签 1：扩展 =================
+      // ================= 标签 1：设置 =================
       Flickable {
         visible: sb.tab === 1
         Layout.fillWidth: true
