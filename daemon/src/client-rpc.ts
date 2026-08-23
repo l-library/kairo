@@ -169,6 +169,41 @@ export async function handleClientEvent(
       }
       break;
     }
+    case "providers_list":
+      broadcast({ type: "providers_response", providers: agent.listProviders() });
+      break;
+    case "provider_add": {
+      if (typeof msg.id === "string" && typeof msg.apiKey === "string") {
+        try {
+          const r = await agent.addProvider(msg.id, msg.apiKey, typeof msg.baseUrl === "string" ? msg.baseUrl : undefined);
+          console.log(`[providers] 已添加 ${msg.id.trim()}，探测到 ${r.models.length} 个模型`);
+        } catch (err) {
+          console.error("[providers] 添加失败:", err);
+          broadcast({
+            type: "error",
+            code: "provider_add_failed",
+            message: `添加提供商失败: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+      }
+      break;
+    }
+    case "provider_remove": {
+      if (typeof msg.id === "string") {
+        try {
+          await agent.removeProvider(msg.id);
+          console.log(`[providers] 已移除 ${msg.id}`);
+        } catch (err) {
+          console.error("[providers] 移除失败:", err);
+          broadcast({
+            type: "error",
+            code: "provider_remove_failed",
+            message: `移除提供商失败: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+      }
+      break;
+    }
     case "get_status":
       broadcast({ type: "status", status: agent.status() });
       // 同步当前会话状态与历史（重连/主动拉取后 UI 恢复完整视图）

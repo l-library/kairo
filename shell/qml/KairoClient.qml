@@ -29,6 +29,7 @@ Item {
   property var models: [] // [{provider, id, name, reasoning, authed, current}]
   property var skills: [] // [{name, description, path}]
   property var plugins: [] // [{source, scope, installedPath}]
+  property var providers: [] // [{id, authed, modelCount}]
 
   // ---- 信号（供 UI 订阅） ----
   signal connectionChanged(var state)
@@ -119,6 +120,19 @@ Item {
     send({ type: "plugins_remove", source: source })
   }
 
+  // ---- 提供商 ----
+  function requestProviders() {
+    send({ type: "providers_list" })
+  }
+
+  function addProvider(id, apiKey, baseUrl) {
+    send({ type: "provider_add", id: id, apiKey: apiKey, baseUrl: baseUrl })
+  }
+
+  function removeProvider(id) {
+    send({ type: "provider_remove", id: id })
+  }
+
   // ---- 协议处理 ----
   QtObject {
     id: protocol
@@ -183,6 +197,11 @@ Item {
           client.plugins = ev.plugins || []
           client.sessionEvent(ev)
           break
+        case "providers_response":
+        case "providers_changed":
+          client.providers = ev.providers || []
+          client.sessionEvent(ev)
+          break
         case "approval_requested":
           client.pendingApproval = ev
           client.approvalsChanged(ev)
@@ -244,6 +263,7 @@ Item {
         client.send({ type: "get_status" })
         client.send({ type: "theme_get" })
         client.send({ type: "models_list" })
+        client.send({ type: "providers_list" })
       } else {
         client.connected = false
       }

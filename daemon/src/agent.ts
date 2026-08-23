@@ -8,6 +8,9 @@
  *
  * 确认门（内联扩展）随会话重建自动重新挂载。
  */
+import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { join } from "node:path";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -27,6 +30,7 @@ import type {
   BroadcastFn,
   ModelInfo,
   PluginInfo,
+  ProviderInfo,
   SessionListItem,
   SessionStatus,
   SkillInfo,
@@ -575,6 +579,184 @@ export class AgentBridge {
     await (rl as { reload?: () => Promise<void> }).reload?.();
     this.broadcast({ type: "plugins_changed", plugins: this.listPlugins() });
     this.broadcast({ type: "skills_response", skills: this.listSkills() });
+  }
+
+  // =========================================================================
+  // 提供商（auth.json / models-store.json 读写 + runtime 刷新）
+  // =========================================================================
+
+  /** 已配置提供商清单（含鉴权状态与模型数） */
+  listProviders(): ProviderInfo[] {
+    const mr = this.runtime?.services?.modelRuntime as unknown as KairoModelRuntime | undefined;
+    if (!mr) return [];
+    const providers = (mr.getProviders?.() ?? []) as unknown[];
+    const out: ProviderInfo[] = [];
+    for (const p of providers) {
+      const pid = typeof p === "string" ? p : (p as { id?: string } | null)?.id ?? String(p);
+      out.push({
+        id: pid,
+        authed: !!mr.hasConfiguredAuth?.(pid),
+        modelCount: (mr.getModels?.(pid) ?? []).length,
+      });
+    }
+    return out;
+  }
+
+  private authJsonPath(): string {
+    return join(this.config.agentDir, "auth.json");
+  }
+  private modelsStorePath(): string {
+    return join(this.config.agentDir, "models-store.json");
+  }
+
+  private readJson<T>(path: string, fallback: T): T {
+    try {
+      if (existsSync(path)) return JSON.parse(readFileSync(path, "utf8")) as T;
+    } catch {
+      /* ignore */
+    }
+    return fallback;
+  }
+  private writeJson(path: string, data: unknown): void {
+    writeFileSync(path, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
+    try {
+      chmodSync(path, 0o600);
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /**
+   * 添加提供商：写 auth.json（密钥）+ models-store.json（模型目录，
+   * 给 baseUrl 时自动探测 OpenAI 兼容 /models 端点），再刷新 runtime。
+   * 不重启 daemon（setRuntimeApiKey + refresh 使内存状态即时生效）。
+   */
+  async addProvider(id: string, apiKey: string, baseUrl?: string): Promise<{ models: string[] }> {
+    const cleanId = id.trim();
+    const cleanKey = apiKey.trim();
+    if (!/^[A-Za-z0-9._-]+$/.test(cleanId)) {
+      throw new Error("提供商 id 只能包含字母、数字、点、下划线、连字符");
+    }
+    if (!cleanKey) throw new Error("api key 不能为空");
+    if (cleanId === "kairo") throw new Error("kairo 为保留 id");
+
+    let fetched: { id: string; name?: string }[] = [];
+    let normalizedBase = "";
+    if (baseUrl && baseUrl.trim()) {
+      normalizedBase = baseUrl.trim().replace(/\/+$/, "");
+      // 先探测 /models，失败则报错（不落盘，避免残留半配置）
+      fetched = await this.fetchOpenAiModels(normalizedBase, cleanKey);
+    }
+
+    // 1) auth.json（密钥，与既有 provider 一致）
+    const auth = this.readJson<Record<string, unknown>>(this.authJsonPath(), {});
+    auth[cleanId] = { type: "api_key", key: cleanKey };
+    this.writeJson(this.authJsonPath(), auth);
+
+    // 2) models.json（自定义 provider 的权威定义——SDK 只在启动时从 models.json
+    //    组合自定义提供商；models-store.json 只是原生 provider 的目录缓存，
+    //    写它无法让新 provider 生效）
+    const modelsJson = this.readJson<{ providers?: Record<string, unknown> }>(
+      join(this.config.agentDir, "models.json"),
+      {},
+    );
+    if (!modelsJson.providers) modelsJson.providers = {};
+    modelsJson.providers[cleanId] = {
+      name: cleanId,
+      baseUrl: normalizedBase || undefined,
+      api: normalizedBase ? "openai-completions" : undefined,
+      // 内联 apiKey：无需 auth.json 也能鉴权（与 auth.json 双保险）
+      apiKey: cleanKey,
+      models: fetched.map((m) => ({
+        id: m.id,
+        name: m.name ?? m.id,
+        api: "openai-completions",
+        baseUrl: normalizedBase,
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128000,
+        maxTokens: 32768,
+        compat: {
+          supportsStore: false,
+          supportsDeveloperRole: false,
+          maxTokensField: "max_tokens",
+          requiresReasoningContentOnAssistantMessages: false,
+        },
+        thinkingLevelMap: { off: null },
+      })),
+    };
+    this.writeJson(join(this.config.agentDir, "models.json"), modelsJson);
+
+    // 3) 生效：SDK 只在 services 初始化时组合 models-store 里的新提供商，
+    //    refresh()/setRuntimeApiKey 均无法让新 provider 即时可见——延迟自重启。
+    //    先给客户端足够时间收到落盘确认，再由 systemd 拉起新进程（面板自动重连）。
+    this.scheduleDaemonRestart();
+    return { models: fetched.map((m) => m.id) };
+  }
+
+  /** 移除提供商（不能移除当前模型正在使用的提供商） */
+  async removeProvider(id: string): Promise<void> {
+    const cleanId = id.trim();
+    const session = this.runtime?.session;
+    if (session?.model?.provider === cleanId) {
+      throw new Error("不能移除当前正在使用的提供商，请先切换到其它提供商");
+    }
+    // 1) auth.json 与 models.json 同步清理
+    const auth = this.readJson<Record<string, unknown>>(this.authJsonPath(), {});
+    if (auth[cleanId]) {
+      delete auth[cleanId];
+      this.writeJson(this.authJsonPath(), auth);
+    }
+    const modelsJson = this.readJson<{ providers?: Record<string, unknown> }>(
+      join(this.config.agentDir, "models.json"),
+      {},
+    );
+    if (modelsJson.providers?.[cleanId]) {
+      delete modelsJson.providers[cleanId];
+      this.writeJson(join(this.config.agentDir, "models.json"), modelsJson);
+    }
+    const store = this.readJson<Record<string, unknown>>(this.modelsStorePath(), {});
+    if (store[cleanId]) {
+      delete store[cleanId];
+      this.writeJson(this.modelsStorePath(), store);
+    }
+    // 3) 生效：同样需要重启才能从 runtime 移除（同 addProvider）
+    this.scheduleDaemonRestart();
+  }
+
+  /** 延迟自重启：落盘后由 systemd 重启 daemon 让新配置生效 */
+  private scheduleDaemonRestart(): void {
+    setTimeout(() => {
+      execFile("systemctl", ["--user", "restart", "kairo-daemon"], (err) => {
+        if (err) {
+          console.error("[providers] 自动重启失败，请手动运行 kairoctl restart:", err.message);
+        }
+      });
+    }, 600);
+  }
+
+  /** 探测 OpenAI 兼容 /models 端点（返回模型 id 列表） */
+  private async fetchOpenAiModels(baseUrl: string, apiKey: string): Promise<{ id: string; name?: string }[]> {
+    const url = `${baseUrl}/models`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      throw new Error(`无法连接 ${url}，请检查 baseUrl`);
+    }
+    if (!res.ok) {
+      throw new Error(`模型目录探测失败 ${url}: HTTP ${res.status}`);
+    }
+    const body = (await res.json().catch(() => null)) as { data?: { id?: string }[] } | null;
+    const ids = (body?.data ?? []).map((m) => m.id).filter((v): v is string => !!v);
+    if (ids.length === 0) {
+      throw new Error(`模型目录探测返回空（${url} 不是 OpenAI 兼容端点？）`);
+    }
+    return ids.map((id) => ({ id }));
   }
 
   private resourceLoaderPackageManager() {

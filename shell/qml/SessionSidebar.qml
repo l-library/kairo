@@ -30,6 +30,8 @@ Item {
   property string activeSessionId: ""
   property var skills: []
   property var plugins: []
+  property var providers: []
+  property string currentProvider: ""
   property int tab: 0 // 0=会话 1=扩展
   property bool open: false
   signal newSessionRequested()
@@ -39,6 +41,9 @@ Item {
   signal pluginsRequested()
   signal installRequested(string source)
   signal removeRequested(string source)
+  signal providersRequested()
+  signal providerAddRequested(string id, string apiKey, string baseUrl)
+  signal providerRemoveRequested(string id)
 
   // 滑入滑出：x 为负时整体移出面板左缘，由面板 clip 裁掉
   x: open ? 0 : -(width + 12)
@@ -114,6 +119,7 @@ Item {
                 sb.tab = 1
                 sb.skillsRequested()
                 sb.pluginsRequested()
+                sb.providersRequested()
               }
             }
           }
@@ -270,165 +276,330 @@ Item {
       }
 
       // ================= 标签 1：扩展 =================
-      ColumnLayout {
+      Flickable {
         visible: sb.tab === 1
         Layout.fillWidth: true
         Layout.fillHeight: true
-        spacing: 8
+        clip: true
+        contentHeight: extCol.implicitHeight
+        Column {
+          id: extCol
+          width: parent.width
+          spacing: 10
 
-        // ---- 技能（只读展示） ----
-        Text {
-          text: "技能 (" + sb.skills.length + ")"
-          font.pixelSize: 11
-          font.bold: true
-          color: theme ? theme.text : "#cdd6f4"
-        }
-        ListView {
-          id: skillList
-          Layout.fillWidth: true
-          height: Math.min(150, Math.max(24, (sb.skills || []).length * 30))
-          clip: true
-          spacing: 2
-          model: sb.skills || []
-          delegate: Rectangle {
-            required property var modelData
-            width: skillList.width
-            height: 28
-            radius: 5
-            color: theme ? theme.surface : "#313244"
-            RowLayout {
-              anchors.fill: parent
-              anchors.leftMargin: 8
-              anchors.rightMargin: 8
-              spacing: 6
-              Text {
-                text: modelData.name
+          // ============ 提供商 ============
+          Text {
+            text: "提供商 (" + sb.providers.length + ")"
+            font.pixelSize: 11
+            font.bold: true
+            color: theme ? theme.text : "#cdd6f4"
+          }
+          ListView {
+            id: provList
+            width: parent.width
+            height: Math.min(120, Math.max(24, (sb.providers || []).length * 30))
+            clip: true
+            spacing: 2
+            model: sb.providers || []
+            delegate: Rectangle {
+              required property var modelData
+              readonly property bool isCurrent: modelData.id === sb.currentProvider
+              width: provList.width
+              height: 28
+              radius: 5
+              color: theme ? theme.surface : "#313244"
+              RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 6
+                spacing: 6
+                Text {
+                  text: modelData.id
+                  color: theme ? theme.text : "#cdd6f4"
+                  font.pixelSize: 10
+                  font.bold: true
+                  Layout.preferredWidth: 110
+                  elide: Text.ElideRight
+                }
+                Text {
+                  text: modelData.authed ? "已鉴权" : "未鉴权"
+                  color: modelData.authed ? (theme ? theme.green : "#a6e3a1") : (theme ? theme.yellow : "#f9e2af")
+                  font.pixelSize: 8
+                }
+                Text {
+                  text: String(modelData.modelCount || 0) + " 模型"
+                  color: theme ? theme.muted : "#6c7086"
+                  font.pixelSize: 8
+                }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                  id: provDel
+                  visible: !isCurrent
+                  width: 22
+                  height: 20
+                  radius: 4
+                  color: provDelMA.containsMouse ? (theme ? theme.red : "#f38ba8") : "transparent"
+                  Text {
+                    anchors.centerIn: parent
+                    text: "✕"
+                    color: provDelMA.containsMouse ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                    font.pixelSize: 10
+                  }
+                  MouseArea {
+                    id: provDelMA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: sb.providerRemoveRequested(modelData.id)
+                  }
+                }
+              }
+            }
+          }
+          Text {
+            text: "添加提供商（baseUrl 留空则用内置目录，如 openai/anthropic…）"
+            color: theme ? theme.faint : "#585b70"
+            font.pixelSize: 9
+            wrapMode: Text.Wrap
+            width: parent.width
+          }
+          RowLayout {
+            width: parent.width
+            spacing: 6
+            Rectangle {
+              Layout.fillWidth: true
+              Layout.preferredWidth: 90
+              height: 26
+              radius: 6
+              color: theme ? theme.surfaceAlt : "#242437"
+              border.color: theme ? theme.border : "#45475a"
+              QC.TextField {
+                id: provIdInput
+                anchors.fill: parent
+                anchors.margins: 2
+                background: null
+                placeholderText: "id（如 my-llm）"
+                placeholderTextColor: theme ? theme.faint : "#585b70"
                 color: theme ? theme.text : "#cdd6f4"
+                font.pixelSize: 10
+                selectByMouse: true
+              }
+            }
+            Rectangle {
+              Layout.fillWidth: true
+              height: 26
+              radius: 6
+              color: theme ? theme.surfaceAlt : "#242437"
+              border.color: theme ? theme.border : "#45475a"
+              QC.TextField {
+                id: provKeyInput
+                anchors.fill: parent
+                anchors.margins: 2
+                background: null
+                placeholderText: "api key"
+                placeholderTextColor: theme ? theme.faint : "#585b70"
+                color: theme ? theme.text : "#cdd6f4"
+                font.pixelSize: 10
+                echoMode: TextInput.Password
+                selectByMouse: true
+              }
+            }
+            Rectangle {
+              id: provAddBtn
+              width: 52
+              height: 26
+              radius: 6
+              color: theme ? theme.accent : "#89b4fa"
+              Text {
+                anchors.centerIn: parent
+                text: "添加"
+                color: theme ? theme.onAccent : "#ffffff"
                 font.pixelSize: 10
                 font.bold: true
-                Layout.preferredWidth: 90
-                elide: Text.ElideRight
               }
-              Text {
-                Layout.fillWidth: true
-                text: String(modelData.description || "").split("\n")[0]
-                color: theme ? theme.muted : "#6c7086"
-                font.pixelSize: 9
-                elide: Text.ElideRight
-              }
-            }
-          }
-        }
-        Text {
-          text: "手动安装技能见 docs/skills.md · 或直接问我"
-          color: theme ? theme.faint : "#585b70"
-          font.pixelSize: 9
-          wrapMode: Text.Wrap
-          Layout.fillWidth: true
-        }
-
-        // ---- pi 插件 ----
-        Text {
-          text: "插件 (" + sb.plugins.length + ")"
-          font.pixelSize: 11
-          font.bold: true
-          color: theme ? theme.text : "#cdd6f4"
-        }
-        ListView {
-          id: pluginList
-          Layout.fillWidth: true
-          Layout.fillHeight: true
-          clip: true
-          spacing: 2
-          model: sb.plugins || []
-          delegate: Rectangle {
-            required property var modelData
-            readonly property bool hoveredDel: del2.containsMouse
-            width: pluginList.width
-            height: 28
-            radius: 5
-            color: theme ? theme.surface : "#313244"
-            RowLayout {
-              anchors.fill: parent
-              anchors.leftMargin: 8
-              anchors.rightMargin: 6
-              spacing: 6
-              Text {
-                Layout.fillWidth: true
-                text: modelData.source
-                color: theme ? theme.text : "#cdd6f4"
-                font.pixelSize: 10
-                elide: Text.ElideRight
-              }
-              Text {
-                text: modelData.scope === "project" ? "项目" : "用户"
-                color: theme ? theme.faint : "#585b70"
-                font.pixelSize: 8
-              }
-              Rectangle {
-                id: del2
-                width: 22
-                height: 20
-                radius: 4
-                color: hoveredDel ? (theme ? theme.red : "#f38ba8") : "transparent"
-                Text {
-                  anchors.centerIn: parent
-                  text: "✕"
-                  color: hoveredDel ? "#ffffff" : (theme ? theme.muted : "#6c7086")
-                  font.pixelSize: 10
-                }
-                MouseArea {
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  onClicked: sb.removeRequested(modelData.source)
+              MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                  var pid = provIdInput.text.trim()
+                  var key = provKeyInput.text.trim()
+                  if (pid === "" || key === "") return
+                  provIdInput.text = ""
+                  provKeyInput.text = ""
+                  sb.providerAddRequested(pid, key, provUrlInput.text.trim())
                 }
               }
             }
           }
-        }
-
-        // ---- 添加插件 ----
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: 6
           Rectangle {
-            Layout.fillWidth: true
+            width: parent.width
             height: 26
             radius: 6
             color: theme ? theme.surfaceAlt : "#242437"
             border.color: theme ? theme.border : "#45475a"
             QC.TextField {
-              id: pluginInput
+              id: provUrlInput
               anchors.fill: parent
               anchors.margins: 2
               background: null
-              placeholderText: "npm 包名 / git 地址…"
+              placeholderText: "baseUrl（可选，OpenAI 兼容则自动探测模型列表）"
               placeholderTextColor: theme ? theme.faint : "#585b70"
               color: theme ? theme.text : "#cdd6f4"
               font.pixelSize: 10
               selectByMouse: true
             }
           }
-          Rectangle {
-            id: addBtn
-            width: 52
-            height: 26
-            radius: 6
-            color: theme ? theme.accent : "#89b4fa"
-            Text {
-              anchors.centerIn: parent
-              text: "安装"
-              color: theme ? theme.onAccent : "#ffffff"
-              font.pixelSize: 10
-              font.bold: true
+
+          // ============ 技能（只读展示） ============
+          Text {
+            text: "技能 (" + sb.skills.length + ")"
+            font.pixelSize: 11
+            font.bold: true
+            color: theme ? theme.text : "#cdd6f4"
+          }
+          ListView {
+            id: skillList
+            width: parent.width
+            height: Math.min(120, Math.max(24, (sb.skills || []).length * 30))
+            clip: true
+            spacing: 2
+            model: sb.skills || []
+            delegate: Rectangle {
+              required property var modelData
+              width: skillList.width
+              height: 28
+              radius: 5
+              color: theme ? theme.surface : "#313244"
+              RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 6
+                Text {
+                  text: modelData.name
+                  color: theme ? theme.text : "#cdd6f4"
+                  font.pixelSize: 10
+                  font.bold: true
+                  Layout.preferredWidth: 90
+                  elide: Text.ElideRight
+                }
+                Text {
+                  Layout.fillWidth: true
+                  text: String(modelData.description || "").split("\n")[0]
+                  color: theme ? theme.muted : "#6c7086"
+                  font.pixelSize: 9
+                  elide: Text.ElideRight
+                }
+              }
             }
-            MouseArea {
-              anchors.fill: parent
-              onClicked: {
-                var src = pluginInput.text.trim()
-                if (src === "") return
-                pluginInput.text = ""
-                sb.installRequested(src)
+          }
+          Text {
+            text: "手动安装技能见 docs/skills.md · 或直接问我"
+            color: theme ? theme.faint : "#585b70"
+            font.pixelSize: 9
+            wrapMode: Text.Wrap
+            width: parent.width
+          }
+
+          // ============ pi 插件 ============
+          Text {
+            text: "插件 (" + sb.plugins.length + ")"
+            font.pixelSize: 11
+            font.bold: true
+            color: theme ? theme.text : "#cdd6f4"
+          }
+          ListView {
+            id: pluginList
+            width: parent.width
+            height: Math.min(140, Math.max(24, (sb.plugins || []).length * 28))
+            clip: true
+            spacing: 2
+            model: sb.plugins || []
+            delegate: Rectangle {
+              required property var modelData
+              width: pluginList.width
+              height: 28
+              radius: 5
+              color: theme ? theme.surface : "#313244"
+              RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 6
+                spacing: 6
+                Text {
+                  Layout.fillWidth: true
+                  text: modelData.source
+                  color: theme ? theme.text : "#cdd6f4"
+                  font.pixelSize: 10
+                  elide: Text.ElideRight
+                }
+                Text {
+                  text: modelData.scope === "project" ? "项目" : "用户"
+                  color: theme ? theme.faint : "#585b70"
+                  font.pixelSize: 8
+                }
+                Rectangle {
+                  id: del2
+                  width: 22
+                  height: 20
+                  radius: 4
+                  color: del2MA.containsMouse ? (theme ? theme.red : "#f38ba8") : "transparent"
+                  Text {
+                    anchors.centerIn: parent
+                    text: "✕"
+                    color: del2MA.containsMouse ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                    font.pixelSize: 10
+                  }
+                  MouseArea {
+                    id: del2MA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: sb.removeRequested(modelData.source)
+                  }
+                }
+              }
+            }
+          }
+          RowLayout {
+            width: parent.width
+            spacing: 6
+            Rectangle {
+              Layout.fillWidth: true
+              height: 26
+              radius: 6
+              color: theme ? theme.surfaceAlt : "#242437"
+              border.color: theme ? theme.border : "#45475a"
+              QC.TextField {
+                id: pluginInput
+                anchors.fill: parent
+                anchors.margins: 2
+                background: null
+                placeholderText: "npm 包名 / git 地址…"
+                placeholderTextColor: theme ? theme.faint : "#585b70"
+                color: theme ? theme.text : "#cdd6f4"
+                font.pixelSize: 10
+                selectByMouse: true
+              }
+            }
+            Rectangle {
+              id: addBtn
+              width: 52
+              height: 26
+              radius: 6
+              color: theme ? theme.accent : "#89b4fa"
+              Text {
+                anchors.centerIn: parent
+                text: "安装"
+                color: theme ? theme.onAccent : "#ffffff"
+                font.pixelSize: 10
+                font.bold: true
+              }
+              MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                  var src = pluginInput.text.trim()
+                  if (src === "") return
+                  pluginInput.text = ""
+                  sb.installRequested(src)
+                }
               }
             }
           }

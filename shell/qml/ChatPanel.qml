@@ -128,6 +128,8 @@ Rectangle {
     activeSessionId: chat.client ? chat.client.sessionId : ""
     skills: chat.client ? chat.client.skills : []
     plugins: chat.client ? chat.client.plugins : []
+    providers: chat.client ? chat.client.providers : []
+    currentProvider: chat.client && chat.client.modelLabel ? chat.client.modelLabel.split("/")[0] : ""
     open: false
     onNewSessionRequested: chat.client.newSession()
     onActivateRequested: function (id) {
@@ -139,6 +141,9 @@ Rectangle {
     onPluginsRequested: chat.client.requestPlugins()
     onInstallRequested: function (src) { chat.client.installPlugin(src) }
     onRemoveRequested: function (src) { chat.client.removePlugin(src) }
+    onProvidersRequested: chat.client.requestProviders()
+    onProviderAddRequested: function (id, key, url) { chat.client.addProvider(id, key, url) }
+    onProviderRemoveRequested: function (id) { chat.client.removeProvider(id) }
   }
 
   // ---- 确认弹窗 ----

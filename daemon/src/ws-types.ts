@@ -24,7 +24,11 @@ export type WsClientEvent =
   | { type: "skills_list" }
   | { type: "plugins_list" }
   | { type: "plugins_install"; source: string }
-  | { type: "plugins_remove"; source: string };
+  | { type: "plugins_remove"; source: string }
+  // 提供商（添加/移除）
+  | { type: "providers_list" }
+  | { type: "provider_add"; id: string; apiKey: string; baseUrl?: string }
+  | { type: "provider_remove"; id: string };
 
 /** 服务端 → 客户端 */
 export type WsServerEvent =
@@ -51,6 +55,8 @@ export type WsServerEvent =
   | { type: "skills_response"; skills: SkillInfo[] }
   | { type: "plugins_response"; plugins: PluginInfo[] }
   | { type: "plugins_changed"; plugins: PluginInfo[] }
+  | { type: "providers_response"; providers: ProviderInfo[] }
+  | { type: "providers_changed"; providers: ProviderInfo[] }
   | { type: "error"; code: string; message: string };
 
 export interface SessionListItem {
@@ -97,6 +103,14 @@ export interface PluginInfo {
   source: string;
   scope: "user" | "project";
   installedPath?: string;
+}
+
+export interface ProviderInfo {
+  id: string;
+  /** 是否已配置密钥（有密钥才可在模型选择器中选择） */
+  authed: boolean;
+  /** 该提供商下可用模型数 */
+  modelCount: number;
 }
 
 export type BroadcastFn = (event: WsServerEvent) => void;
