@@ -42,9 +42,10 @@ Hyprland
 | `daemon/src/agent.ts` | AgentSession 封装、事件归一化、`setRebindSession` 会话重绑 |
 | `daemon/src/panel-socket.ts` | 面板 Unix socket（quickshell 无 TCP 支持的原生替代通道） |
 | `shell/` | quickshell QML 项目（`config.qml` 入口） |
-| `shell/qml/` | 组件：ChatPanel / MessageBubble / ToolCard / ApprovalDialog / SessionBar / InputBar / KairoClient |
+| `shell/qml/` | 组件：ChatPanel / MessageBubble / ToolCard / ApprovalDialog / SessionSidebar / InputBar / KairoClient / TitleBar |
 | `scripts/` | setup.sh（密钥导入）/ install.sh / toggle-kairo.sh / kairoctl |
-| `docs/` | 配置参考与使用说明 |
+| `skills/` | 内置技能（kairo-skills：教模型自行安装技能，随安装同步） |
+| `docs/` | 配置参考与使用说明（含 `docs/skills.md` 技能手动安装指南） |
 
 ## 与宿主隔离
 

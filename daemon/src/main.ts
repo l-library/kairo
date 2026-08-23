@@ -2,9 +2,9 @@
  * main.ts — daemon 入口：装配 config / approvals / agent / sessions / HTTP / WS
  */
 import { createServer } from "node:http";
-import { readFileSync, writeFileSync } from "node:fs";
-import { existsSync } from "node:fs";
-import { resolveConfig } from "./config.js";
+import { readFileSync, writeFileSync, cpSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { resolveConfig, type KairoConfig } from "./config.js";
 import { ApprovalRegistry } from "./approval.js";
 import { AgentBridge } from "./agent.js";
 import { KairoSessionManager } from "./session-manager.js";
@@ -98,7 +98,24 @@ const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });
 // --- HTTP + WS ---
 const httpServer = createServer(startHttpApi({ agent, sessions, token: config.token }));
 
+/**
+ * 确保内置技能存在（正常由 install.sh 同步；未运行 install.sh 的机器由 daemon 兜底）
+ */
+function ensureBuiltinSkills(config: KairoConfig): void {
+  try {
+    const src = join(import.meta.dirname, "..", "..", "skills", "kairo-skills");
+    const dest = join(config.agentDir, "skills", "kairo-skills");
+    if (!existsSync(src) || existsSync(join(dest, "SKILL.md"))) return;
+    mkdirSync(join(config.agentDir, "skills"), { recursive: true });
+    cpSync(src, dest, { recursive: true });
+    console.log("[kairo-daemon] 已同步内置技能 kairo-skills");
+  } catch (err) {
+    console.error("[kairo-daemon] 内置技能同步失败:", err);
+  }
+}
+
 async function main(): Promise<void> {
+  ensureBuiltinSkills(config);
   wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions, themeStore });
   panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions, themeStore });
   await agent.start();

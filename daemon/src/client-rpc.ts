@@ -86,6 +86,89 @@ export async function handleClientEvent(
     case "theme_get":
       broadcast({ type: "theme_changed", theme: themeStore.get() });
       break;
+    case "models_list":
+      broadcast({ type: "models_response", models: agent.listModels() });
+      break;
+    case "model_set": {
+      if (typeof msg.provider === "string" && typeof msg.model === "string") {
+        try {
+          await agent.setModel(msg.provider, msg.model);
+          const cur = agent.currentModelLabel();
+          broadcast({
+            type: "model_changed",
+            provider: cur.provider,
+            model: cur.model,
+            thinkingLevel: cur.thinkingLevel,
+            thinkingLevels: cur.thinkingLevels,
+          });
+        } catch (err) {
+          broadcast({
+            type: "error",
+            code: "model_set_failed",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      break;
+    }
+    case "thinking_set": {
+      if (typeof msg.level === "string") {
+        try {
+          await agent.setThinkingLevel(msg.level);
+          const cur = agent.currentModelLabel();
+          broadcast({
+            type: "model_changed",
+            provider: cur.provider,
+            model: cur.model,
+            thinkingLevel: cur.thinkingLevel,
+            thinkingLevels: cur.thinkingLevels,
+          });
+        } catch (err) {
+          broadcast({
+            type: "error",
+            code: "thinking_set_failed",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      break;
+    }
+    case "skills_list":
+      broadcast({ type: "skills_response", skills: agent.listSkills() });
+      break;
+    case "plugins_list":
+      broadcast({ type: "plugins_response", plugins: agent.listPlugins() });
+      break;
+    case "plugins_install": {
+      const src = typeof msg.source === "string" ? msg.source.trim() : "";
+      if (!src) break;
+      try {
+        await agent.installPlugin(src);
+      } catch (err) {
+        console.error("[plugins] 安装失败:", err);
+        broadcast({
+          type: "error",
+          code: "plugins_install_failed",
+          message: `安装插件失败: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+      break;
+    }
+    case "plugins_remove": {
+      const src = typeof msg.source === "string" ? msg.source.trim() : "";
+      if (!src) break;
+      try {
+        await agent.removePlugin(src);
+      } catch (err) {
+        console.error("[plugins] 移除失败:", err);
+        broadcast({
+          type: "error",
+          code: "plugins_remove_failed",
+          message: `移除插件失败: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+      break;
+    }
     case "get_status":
       broadcast({ type: "status", status: agent.status() });
       // 同步当前会话状态与历史（重连/主动拉取后 UI 恢复完整视图）

@@ -1,14 +1,19 @@
 import QtQuick
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 
 /**
- * SessionSidebar.qml — 会话侧边栏（点击标题栏 ☰ 呼出）
+ * SessionSidebar.qml — kairo 侧边栏（点击标题栏 ☰ 呼出）
  *
- * - 纵向会话列表：AI/启发式命名或首条消息摘要 + 消息数
- * - 活动会话置顶并高亮（daemon listWithActive 保证）
- * - 删除：两步确认（第一次点击 🗑 变为“确认”，3 秒内再点才删除），防误删
- * - 交互命中顺序：整行 MouseArea 声明在底层，删除按钮 MouseArea 在 RowLayout
- *   上方（后声明 = 更上层），修复 M4 遗留的“chip 点击区吞掉删除按钮”bug
+ * 两个标签：
+ *  - 会话：纵向会话列表（命名/首条摘要/消息数、活动高亮、两步确认删除）
+ *  - 扩展：技能（只读展示）+ pi 插件（列表/安装/移除）
+ *
+ * 注意：
+ *  - 交互命中顺序：整行 MouseArea 声明在底层，删除按钮 MouseArea 在
+ *    RowLayout 上方（后声明 = 更上层），修复“行点击吞掉删除按钮”bug
+ *  - armed 状态统一用 delegate 根（row）的单一来源；按钮色用纯绑定
+ *  - 用 x/y 定位（topOffset/bottomOffset），anchors 会覆盖 x 导致常驻
  */
 Item {
   id: sb
@@ -23,13 +28,19 @@ Item {
   property var theme: null
   property var sessions: []
   property string activeSessionId: ""
+  property var skills: []
+  property var plugins: []
+  property int tab: 0 // 0=会话 1=扩展
   property bool open: false
   signal newSessionRequested()
   signal activateRequested(string id)
   signal deleteRequested(string id)
+  signal skillsRequested()
+  signal pluginsRequested()
+  signal installRequested(string source)
+  signal removeRequested(string source)
 
   // 滑入滑出：x 为负时整体移出面板左缘，由面板 clip 裁掉
-  // （注意：不能用 anchors 定位，anchors 会覆盖 x，导致侧边栏常驻）
   x: open ? 0 : -(width + 12)
   Behavior on x {
     NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
@@ -54,22 +65,60 @@ Item {
       anchors.margins: 10
       spacing: 8
 
-      // 头部：标题 + 数量 + 关闭
+      // ---- 头部：标签切换 + 关闭 ----
       RowLayout {
         Layout.fillWidth: true
         spacing: 6
-        Text {
-          text: "会话"
-          font.pixelSize: 13
-          font.bold: true
-          color: theme ? theme.text : "#cdd6f4"
+
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: 4
+
+          // 会话 tab
+          Rectangle {
+            id: tabSessions
+            Layout.fillWidth: true
+            height: 24
+            radius: 6
+            color: sb.tab === 0 ? (theme ? theme.accent : "#89b4fa") : (theme ? theme.surface : "#313244")
+            Text {
+              anchors.centerIn: parent
+              text: "会话 (" + sb.sessions.length + ")"
+              color: sb.tab === 0 ? "#ffffff" : (theme ? theme.subtext : "#a6adc8")
+              font.pixelSize: 11
+              font.bold: sb.tab === 0
+            }
+            MouseArea {
+              anchors.fill: parent
+              onClicked: sb.tab = 0
+            }
+          }
+
+          // 扩展 tab
+          Rectangle {
+            id: tabExt
+            Layout.fillWidth: true
+            height: 24
+            radius: 6
+            color: sb.tab === 1 ? (theme ? theme.accent : "#89b4fa") : (theme ? theme.surface : "#313244")
+            Text {
+              anchors.centerIn: parent
+              text: "扩展 (" + (sb.skills.length + sb.plugins.length) + ")"
+              color: sb.tab === 1 ? "#ffffff" : (theme ? theme.subtext : "#a6adc8")
+              font.pixelSize: 11
+              font.bold: sb.tab === 1
+            }
+            MouseArea {
+              anchors.fill: parent
+              onClicked: {
+                sb.tab = 1
+                sb.skillsRequested()
+                sb.pluginsRequested()
+              }
+            }
+          }
         }
-        Text {
-          text: "(" + sb.sessions.length + ")"
-          font.pixelSize: 10
-          color: theme ? theme.muted : "#6c7086"
-        }
-        Item { Layout.fillWidth: true }
+
         Text {
           text: "✕"
           font.pixelSize: 13
@@ -81,133 +130,305 @@ Item {
         }
       }
 
-      // 新建
-      Rectangle {
-        id: newBtn
+      // ================= 标签 0：会话 =================
+      ColumnLayout {
+        visible: sb.tab === 0
         Layout.fillWidth: true
-        height: 30
-        radius: 6
-        color: theme ? theme.surface : "#313244"
-        Text {
-          anchors.centerIn: parent
-          text: "＋ 新建会话"
-          color: theme ? theme.subtext : "#a6adc8"
-          font.pixelSize: 12
+        Layout.fillHeight: true
+        spacing: 8
+
+        // 新建
+        Rectangle {
+          id: newBtn
+          Layout.fillWidth: true
+          height: 30
+          radius: 6
+          color: theme ? theme.surface : "#313244"
+          Text {
+            anchors.centerIn: parent
+            text: "＋ 新建会话"
+            color: theme ? theme.subtext : "#a6adc8"
+            font.pixelSize: 12
+          }
+          MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: sb.newSessionRequested()
+            onEntered: newBtn.color = theme ? theme.surfaceHover : "#3b4261"
+            onExited: newBtn.color = theme ? theme.surface : "#313244"
+          }
         }
-        MouseArea {
-          anchors.fill: parent
-          hoverEnabled: true
-          onClicked: sb.newSessionRequested()
-          onEntered: newBtn.color = theme ? theme.surfaceHover : "#3b4261"
-          onExited: newBtn.color = theme ? theme.surface : "#313244"
+
+        // 会话列表
+        ListView {
+          id: list
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          clip: true
+          spacing: 4
+          model: sb.sessions
+          delegate: Rectangle {
+            id: row
+            required property var modelData
+            readonly property bool isActive: modelData.id === sb.activeSessionId
+            property bool armed: false
+            width: list.width
+            height: 48
+            radius: 8
+            color: isActive
+              ? (theme ? theme.accent : "#89b4fa")
+              : (rowMA.containsMouse ? (theme ? theme.surfaceHover : "#3b4261") : (theme ? theme.surface : "#313244"))
+
+            // 整行点击区：声明在最底层（z 最下），不遮挡删除按钮
+            MouseArea {
+              id: rowMA
+              anchors.fill: parent
+              hoverEnabled: true
+              onClicked: {
+                // 处于确认态时点击行 = 取消确认，不切换会话
+                if (row.armed) { row.armed = false; return }
+                if (!isActive) sb.activateRequested(modelData.id)
+              }
+            }
+
+            RowLayout {
+              anchors.fill: parent
+              anchors.leftMargin: 10
+              anchors.rightMargin: 6
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: 8
+
+              ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                Text {
+                  Layout.fillWidth: true
+                  text: sb.sessionLabel(modelData)
+                  color: isActive ? "#ffffff" : (theme ? theme.text : "#cdd6f4")
+                  font.pixelSize: 12
+                  font.bold: isActive
+                  elide: Text.ElideRight
+                }
+                Text {
+                  visible: !isActive && modelData.firstMessage && String(modelData.firstMessage).trim() !== "" && modelData.name !== modelData.firstMessage
+                  Layout.fillWidth: true
+                  text: String(modelData.firstMessage || "").trim().replace(/\s+/g, " ")
+                  color: isActive ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                  font.pixelSize: 9
+                  elide: Text.ElideRight
+                }
+              }
+
+              // 消息数
+              Text {
+                visible: !isActive && (modelData.messageCount || 0) > 0
+                text: String(modelData.messageCount || 0)
+                font.pixelSize: 9
+                color: isActive ? "#ffffff" : (theme ? theme.faint : "#585b70")
+              }
+
+              // 删除按钮（两步确认）。后声明 = 在行点击区之上，点击优先到删除
+              Rectangle {
+                id: delBtn
+                visible: !isActive
+                width: row.armed ? 64 : 22
+                height: 22
+                radius: 5
+                // 纯绑定：armed→红底；悬停→浅色。不用 onEntered 赋值（会破坏绑定）
+                color: row.armed
+                  ? (theme ? theme.red : "#f38ba8")
+                  : (delMA.containsMouse ? (theme ? theme.surfaceHover : "#3b4261") : "transparent")
+                Text {
+                  anchors.centerIn: parent
+                  text: row.armed ? "确认删除" : "🗑"
+                  color: row.armed ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                  font.pixelSize: row.armed ? 10 : 9
+                }
+                MouseArea {
+                  id: delMA
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  onClicked: {
+                    if (row.armed) {
+                      row.armed = false
+                      sb.deleteRequested(modelData.id)
+                    } else {
+                      row.armed = true
+                      disarmTimer.restart()
+                    }
+                  }
+                }
+                Timer {
+                  id: disarmTimer
+                  interval: 3000
+                  onTriggered: row.armed = false
+                }
+              }
+            }
+          }
         }
       }
 
-      // 会话列表
-      ListView {
-        id: list
+      // ================= 标签 1：扩展 =================
+      ColumnLayout {
+        visible: sb.tab === 1
         Layout.fillWidth: true
         Layout.fillHeight: true
-        clip: true
-        spacing: 4
-        model: sb.sessions
-        delegate: Rectangle {
-          id: row
-          required property var modelData
-          readonly property bool isActive: modelData.id === sb.activeSessionId
-          property bool armed: false
-          width: list.width
-          height: 48
-          radius: 8
-          color: isActive
-            ? (theme ? theme.accent : "#89b4fa")
-            : (rowMA.containsMouse ? (theme ? theme.surfaceHover : "#3b4261") : (theme ? theme.surface : "#313244"))
+        spacing: 8
 
-          // 整行点击区：声明在最底层（z 最下），不遮挡删除按钮
-          MouseArea {
-            id: rowMA
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: {
-              // 处于确认态时点击行 = 取消确认，不切换会话
-              if (row.armed) { row.armed = false; return }
-              if (!isActive) sb.activateRequested(modelData.id)
-            }
-          }
-
-          RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 6
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 8
-
-            ColumnLayout {
-              Layout.fillWidth: true
-              spacing: 2
+        // ---- 技能（只读展示） ----
+        Text {
+          text: "技能 (" + sb.skills.length + ")"
+          font.pixelSize: 11
+          font.bold: true
+          color: theme ? theme.text : "#cdd6f4"
+        }
+        ListView {
+          id: skillList
+          Layout.fillWidth: true
+          height: Math.min(150, Math.max(24, (sb.skills || []).length * 30))
+          clip: true
+          spacing: 2
+          model: sb.skills || []
+          delegate: Rectangle {
+            required property var modelData
+            width: skillList.width
+            height: 28
+            radius: 5
+            color: theme ? theme.surface : "#313244"
+            RowLayout {
+              anchors.fill: parent
+              anchors.leftMargin: 8
+              anchors.rightMargin: 8
+              spacing: 6
               Text {
-                Layout.fillWidth: true
-                text: sb.sessionLabel(modelData)
-                color: isActive ? "#ffffff" : (theme ? theme.text : "#cdd6f4")
-                font.pixelSize: 12
-                font.bold: isActive
+                text: modelData.name
+                color: theme ? theme.text : "#cdd6f4"
+                font.pixelSize: 10
+                font.bold: true
+                Layout.preferredWidth: 90
                 elide: Text.ElideRight
               }
               Text {
-                visible: !isActive && modelData.firstMessage && String(modelData.firstMessage).trim() !== "" && modelData.name !== modelData.firstMessage
                 Layout.fillWidth: true
-                text: String(modelData.firstMessage || "").trim().replace(/\s+/g, " ")
-                color: isActive ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                text: String(modelData.description || "").split("\n")[0]
+                color: theme ? theme.muted : "#6c7086"
                 font.pixelSize: 9
                 elide: Text.ElideRight
               }
             }
+          }
+        }
+        Text {
+          text: "手动安装技能见 docs/skills.md · 或直接问我"
+          color: theme ? theme.faint : "#585b70"
+          font.pixelSize: 9
+          wrapMode: Text.Wrap
+          Layout.fillWidth: true
+        }
 
-            // 消息数
-            Text {
-              visible: !isActive && (modelData.messageCount || 0) > 0
-              text: String(modelData.messageCount || 0)
-              font.pixelSize: 9
-              color: isActive ? "#ffffff" : (theme ? theme.faint : "#585b70")
-            }
-
-            // 删除按钮（两步确认）。后声明 = 在行点击区之上，点击优先到删除
-            Rectangle {
-              id: delBtn
-              visible: !isActive
-              width: row.armed ? 64 : 22
-              height: 22
-              radius: 5
-              // 纯绑定：armed→红底；悬停→浅色。不用 onEntered 赋值（会破坏绑定）
-              color: row.armed
-                ? (theme ? theme.red : "#f38ba8")
-                : (delMA.containsMouse ? (theme ? theme.surfaceHover : "#3b4261") : "transparent")
+        // ---- pi 插件 ----
+        Text {
+          text: "插件 (" + sb.plugins.length + ")"
+          font.pixelSize: 11
+          font.bold: true
+          color: theme ? theme.text : "#cdd6f4"
+        }
+        ListView {
+          id: pluginList
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          clip: true
+          spacing: 2
+          model: sb.plugins || []
+          delegate: Rectangle {
+            required property var modelData
+            readonly property bool hoveredDel: del2.containsMouse
+            width: pluginList.width
+            height: 28
+            radius: 5
+            color: theme ? theme.surface : "#313244"
+            RowLayout {
+              anchors.fill: parent
+              anchors.leftMargin: 8
+              anchors.rightMargin: 6
+              spacing: 6
               Text {
-                anchors.centerIn: parent
-                text: row.armed ? "确认删除" : "🗑"
-                color: row.armed ? "#ffffff" : (theme ? theme.muted : "#6c7086")
-                font.pixelSize: row.armed ? 10 : 9
+                Layout.fillWidth: true
+                text: modelData.source
+                color: theme ? theme.text : "#cdd6f4"
+                font.pixelSize: 10
+                elide: Text.ElideRight
               }
-              MouseArea {
-                id: delMA
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: {
-                  // 注意：armed 是 delegate 根（row）的属性——直接写 parent.armed 会
-                  // 落到 delBtn 的动态属性上（两处 armed 不同源），确认态永远不可见。
-                  if (row.armed) {
-                    row.armed = false
-                    sb.deleteRequested(modelData.id)
-                  } else {
-                    row.armed = true
-                    disarmTimer.restart()
-                  }
+              Text {
+                text: modelData.scope === "project" ? "项目" : "用户"
+                color: theme ? theme.faint : "#585b70"
+                font.pixelSize: 8
+              }
+              Rectangle {
+                id: del2
+                width: 22
+                height: 20
+                radius: 4
+                color: hoveredDel ? (theme ? theme.red : "#f38ba8") : "transparent"
+                Text {
+                  anchors.centerIn: parent
+                  text: "✕"
+                  color: hoveredDel ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                  font.pixelSize: 10
+                }
+                MouseArea {
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  onClicked: sb.removeRequested(modelData.source)
                 }
               }
-              Timer {
-                id: disarmTimer
-                interval: 3000
-                onTriggered: row.armed = false
+            }
+          }
+        }
+
+        // ---- 添加插件 ----
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: 6
+          Rectangle {
+            Layout.fillWidth: true
+            height: 26
+            radius: 6
+            color: theme ? theme.surfaceAlt : "#242437"
+            border.color: theme ? theme.border : "#45475a"
+            QC.TextField {
+              id: pluginInput
+              anchors.fill: parent
+              anchors.margins: 2
+              background: null
+              placeholderText: "npm 包名 / git 地址…"
+              placeholderTextColor: theme ? theme.faint : "#585b70"
+              color: theme ? theme.text : "#cdd6f4"
+              font.pixelSize: 10
+              selectByMouse: true
+            }
+          }
+          Rectangle {
+            id: addBtn
+            width: 52
+            height: 26
+            radius: 6
+            color: theme ? theme.accent : "#89b4fa"
+            Text {
+              anchors.centerIn: parent
+              text: "安装"
+              color: theme ? theme.onAccent : "#ffffff"
+              font.pixelSize: 10
+              font.bold: true
+            }
+            MouseArea {
+              anchors.fill: parent
+              onClicked: {
+                var src = pluginInput.text.trim()
+                if (src === "") return
+                pluginInput.text = ""
+                sb.installRequested(src)
               }
             }
           }

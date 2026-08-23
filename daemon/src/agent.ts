@@ -25,8 +25,11 @@ import type { ApprovalRegistry } from "./approval.js";
 import { createApprovalGateExtension } from "./approval.js";
 import type {
   BroadcastFn,
+  ModelInfo,
+  PluginInfo,
   SessionListItem,
   SessionStatus,
+  SkillInfo,
   WsServerEvent,
 } from "./ws-types.js";
 
@@ -104,6 +107,16 @@ interface NamingModelRuntime {
   ): Promise<{ content: unknown }>;
 }
 
+/** 模型清单 / 切换只接触 modelRuntime 的视图 */
+interface KairoModelRuntime {
+  getProviders?(): unknown[];
+  getModels?(providerId?: string): { id: string; name?: string; reasoning?: boolean }[];
+  getModel?(providerId: string, modelId: string): unknown;
+  hasConfiguredAuth?(providerId: string): boolean;
+}
+
+type KnownModel = { id: string; name?: string; reasoning?: boolean };
+
 export class AgentBridge {
   runtime: AgentSessionRuntime | null = null;
   private unsubscribe: (() => void) | null = null;
@@ -123,11 +136,15 @@ export class AgentBridge {
     this.mode = initialMode;
   }
 
-  /** 创建 runtime 工厂（资源加载器内联扩展 = 确认门 + 按模式系统提示） */
+  /** 创建 runtime 工厂（资源加载器内联扩展 = 确认门 + 按模式系统提示 + 资源隔离） */
   private makeRuntimeFactory(): CreateAgentSessionRuntimeFactory {
     const config = this.config;
     const approvals = this.approvals;
     return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
+      // 隔离：只保留 kairo agentDir 内的资源（skills/prompts/themes/extensions），
+      // 丢弃 SDK 默认目录（如 ~/.agents/skills）泄漏进来的宿主资源
+      const inAgentDir = (p: string | undefined): boolean =>
+        !!p && (p.startsWith(config.agentDir + "/") || p === config.agentDir);
       const services = await createAgentSessionServices({
         cwd,
         agentDir,
@@ -140,6 +157,24 @@ export class AgentBridge {
             if (this.mode === "chat") return MODE_SYSTEM_PROMPT.chat;
             return [MODE_SYSTEM_PROMPT.command, base].filter((s) => s && s.trim()).join("\n\n");
           },
+          skillsOverride: (base) => ({
+            ...base,
+            skills: base.skills.filter((s) => inAgentDir(s.filePath)),
+          }),
+          promptsOverride: (base) => ({
+            ...base,
+            prompts: base.prompts.filter((p) => inAgentDir((p as { path?: string }).path)),
+          }),
+          themesOverride: (base) => ({
+            ...base,
+            themes: base.themes.filter((t) => inAgentDir((t as { path?: string }).path)),
+          }),
+          extensionsOverride: (base) => ({
+            ...base,
+            extensions: base.extensions.filter((e) =>
+              inAgentDir((e as { baseDir?: string; path?: string }).baseDir ?? (e as { path?: string }).path),
+            ),
+          }),
         },
       });
       return {
@@ -418,13 +453,154 @@ export class AgentBridge {
     return this.runtime?.session.sessionId ?? "";
   }
 
+  // =========================================================================
+  // 模型 / 思维等级
+  // =========================================================================
+
+  /** 当前模型摘要（provider/id + 思维等级 + 可用等级），供 status / model_changed */
+  currentModelLabel(): {
+    provider: string;
+    model: string;
+    thinkingLevel: string;
+    thinkingLevels: string[];
+  } {
+    const session = this.runtime?.session;
+    const m = session?.model;
+    return {
+      provider: m?.provider ?? "",
+      model: m?.id ?? "",
+      thinkingLevel: session?.thinkingLevel ?? "medium",
+      thinkingLevels: session?.getAvailableThinkingLevels() ?? [],
+    };
+  }
+
+  /** 可用模型清单（目录快照 + 鉴权标记），供 GUI 模型选择器 */
+  listModels(): ModelInfo[] {
+    const session = this.runtime?.session;
+    const mr = this.runtime?.services?.modelRuntime as unknown as KairoModelRuntime | undefined;
+    if (!mr) return [];
+    const providers = (mr.getProviders?.() ?? []) as unknown[];
+    const current = session?.model;
+    const out: ModelInfo[] = [];
+    for (const p of providers) {
+      const pid =
+        typeof p === "string" ? p : (p as { id?: string } | null)?.id ?? String(p);
+      const models = (mr.getModels?.(pid) ?? []) as KnownModel[];
+      const authed = !!mr.hasConfiguredAuth?.(pid);
+      // 只展示已鉴权模型——目录快照会包含全部内置目（数百个未配置 provider 的模型），
+      // 选择器只对可用的模型有意义
+      if (!authed) continue;
+      for (const m of models) {
+        out.push({
+          provider: pid,
+          id: m.id,
+          name: m.name ?? m.id,
+          reasoning: !!m.reasoning,
+          authed,
+          current: current ? current.provider === pid && current.id === m.id : false,
+        });
+      }
+    }
+    return out;
+  }
+
+  /** 切换模型（setModel 自带鉴权校验与 settings 持久化） */
+  async setModel(provider: string, modelId: string): Promise<void> {
+    const runtime = this.runtime;
+    const session = runtime?.session;
+    const mr = runtime?.services?.modelRuntime as unknown as KairoModelRuntime | undefined;
+    if (!session || !mr) throw new Error("daemon 尚未就绪");
+    if (session.isStreaming) {
+      await session.abort().catch(() => {});
+    }
+    const model = mr.getModel?.(provider, modelId);
+    if (!model) throw new Error(`模型不存在: ${provider}/${modelId}`);
+    await session.setModel(model as never);
+  }
+
+  /** 设置思维等级（按当前模型可用等级校验） */
+  async setThinkingLevel(level: string): Promise<void> {
+    const session = this.runtime?.session;
+    if (!session) throw new Error("daemon 尚未就绪");
+    const levels = session.getAvailableThinkingLevels();
+    if (!levels.includes(level as never)) {
+      throw new Error(`当前模型不支持思维等级: ${level}（可用: ${levels.join("/")}）`);
+    }
+    session.setThinkingLevel(level as never);
+  }
+
+  // =========================================================================
+  // 技能（只读展示） / pi 插件（安装/移除）
+  // =========================================================================
+
+  /** 已加载技能清单（来自 resourceLoader，含内置 kairo-skills） */
+  listSkills(): SkillInfo[] {
+    const rl = this.runtime?.services?.resourceLoader;
+    const res = rl?.getSkills();
+    return (res?.skills ?? []).map((s) => ({
+      name: s.name,
+      description: s.description,
+      path: s.filePath,
+    }));
+  }
+
+  /** 已配置的 pi 插件清单 */
+  listPlugins(): PluginInfo[] {
+    const pm = this.resourceLoaderPackageManager();
+    if (!pm) return [];
+    return (pm.listConfiguredPackages() ?? []).map((p) => ({
+      source: p.source,
+      scope: p.scope,
+      installedPath: p.installedPath,
+    }));
+  }
+
+  /** 安装 pi 插件（npm/git/本地），成功后 reload 资源并广播 */
+  async installPlugin(source: string): Promise<void> {
+    const rl = this.runtime?.services?.resourceLoader;
+    const pm = this.resourceLoaderPackageManager();
+    if (!pm || !rl) throw new Error("包管理器不可用");
+    await pm.installAndPersist(source);
+    await (rl as { reload?: () => Promise<void> }).reload?.();
+    this.broadcast({ type: "plugins_changed", plugins: this.listPlugins() });
+    this.broadcast({ type: "skills_response", skills: this.listSkills() });
+  }
+
+  /** 移除 pi 插件，成功后 reload 资源并广播 */
+  async removePlugin(source: string): Promise<void> {
+    const rl = this.runtime?.services?.resourceLoader;
+    const pm = this.resourceLoaderPackageManager();
+    if (!pm || !rl) throw new Error("包管理器不可用");
+    await pm.removeAndPersist(source);
+    await (rl as { reload?: () => Promise<void> }).reload?.();
+    this.broadcast({ type: "plugins_changed", plugins: this.listPlugins() });
+    this.broadcast({ type: "skills_response", skills: this.listSkills() });
+  }
+
+  private resourceLoaderPackageManager() {
+    return (this.runtime?.services?.resourceLoader as unknown as {
+      packageManager?: {
+        installAndPersist(source: string, options?: { local?: boolean }): Promise<void>;
+        removeAndPersist(source: string, options?: { local?: boolean }): Promise<boolean>;
+        listConfiguredPackages(): {
+          source: string;
+          scope: "user" | "project";
+          installedPath?: string;
+        }[];
+      };
+    }).packageManager;
+  }
+
   status(): SessionStatus {
+    const m = this.runtime?.session?.model;
     return {
       mode: this.mode,
       sessionId: this.runtime?.session.sessionId ?? "",
       sessionName: currentSessionName(this.runtime?.session),
       streaming: this.isStreaming,
       pendingApprovals: this.approvals.size,
+      model: m ? `${m.provider}/${m.id}` : "",
+      thinkingLevel: this.runtime?.session?.thinkingLevel ?? "",
     };
   }
 

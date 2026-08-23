@@ -37,6 +37,16 @@ echo "    kairo-daemon 运行中 ✅"
 echo "==> [3/4] 导入 provider 密钥…"
 "$REPO_DIR/scripts/setup.sh"
 
+echo "==> [3b] 同步内置技能（kairo-skills）…"
+KAIRO_SKILLS="$HOME/.config/kairo/agent/skills"
+mkdir -p "$KAIRO_SKILLS"
+cp -rn "$REPO_DIR/skills/kairo-skills" "$KAIRO_SKILLS/"
+if [[ -f "$KAIRO_SKILLS/kairo-skills/SKILL.md" ]]; then
+  echo "    kairo-skills 技能已就位 ✅"
+else
+  echo "!! 技能同步失败，请检查 $REPO_DIR/skills/kairo-skills" >&2
+fi
+
 echo "==> [4/4] 写入 Hyprland 片段…"
 read -r -p "    将片段追加到 $HYPR_CONF？（y/N）" yes
 if [[ "$yes" =~ ^[Yy]$ ]]; then

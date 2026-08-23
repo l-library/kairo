@@ -22,6 +22,13 @@ Item {
   property bool agentsRunning: false
   property var pendingApproval: null // { id, toolName, target, diff, command, cwd }
   property var sessions: [] // [{id, name, path, ...}]
+  // 模型 / 思维等级 / 技能 / 插件
+  property string modelLabel: "" // provider/id
+  property string thinkingLevel: ""
+  property var thinkingLevels: []
+  property var models: [] // [{provider, id, name, reasoning, authed, current}]
+  property var skills: [] // [{name, description, path}]
+  property var plugins: [] // [{source, scope, installedPath}]
 
   // ---- 信号（供 UI 订阅） ----
   signal connectionChanged(var state)
@@ -82,6 +89,36 @@ Item {
     send({ type: "theme_set", theme: p })
   }
 
+  // ---- 模型 / 思维等级 ----
+  function requestModels() {
+    send({ type: "models_list" })
+  }
+
+  function setModel(provider, model) {
+    send({ type: "model_set", provider: provider, model: model })
+  }
+
+  function setThinkingLevel(level) {
+    send({ type: "thinking_set", level: level })
+  }
+
+  // ---- 技能 / 插件 ----
+  function requestSkills() {
+    send({ type: "skills_list" })
+  }
+
+  function requestPlugins() {
+    send({ type: "plugins_list" })
+  }
+
+  function installPlugin(source) {
+    send({ type: "plugins_install", source: source })
+  }
+
+  function removePlugin(source) {
+    send({ type: "plugins_remove", source: source })
+  }
+
   // ---- 协议处理 ----
   QtObject {
     id: protocol
@@ -101,6 +138,8 @@ Item {
           client.sessionName = ev.status.sessionName || ""
           client.streaming = ev.status.streaming
           client.agentsRunning = ev.status.streaming
+          client.modelLabel = ev.status.model || client.modelLabel
+          client.thinkingLevel = ev.status.thinkingLevel || client.thinkingLevel
           client.connectionChanged(true)
           break
         case "theme_changed":
@@ -123,6 +162,25 @@ Item {
           break
         case "session_list":
           client.sessions = ev.sessions || []
+          client.sessionEvent(ev)
+          break
+        case "model_changed":
+          client.modelLabel = ev.provider ? ev.provider + "/" + (ev.model || "") : (ev.model || "")
+          client.thinkingLevel = ev.thinkingLevel || ""
+          client.thinkingLevels = ev.thinkingLevels || client.thinkingLevels
+          client.sessionEvent(ev)
+          break
+        case "models_response":
+          client.models = ev.models || []
+          client.sessionEvent(ev)
+          break
+        case "skills_response":
+          client.skills = ev.skills || []
+          client.sessionEvent(ev)
+          break
+        case "plugins_response":
+        case "plugins_changed":
+          client.plugins = ev.plugins || []
           client.sessionEvent(ev)
           break
         case "approval_requested":
@@ -182,9 +240,10 @@ Item {
       client.connected = sock.connected
       if (sock.connected) {
         client.reconnectAttempts = 0
-        // 连接成功：请求当前状态
+        // 连接成功：请求当前状态 + 模型清单（模型选择器数据）
         client.send({ type: "get_status" })
         client.send({ type: "theme_get" })
+        client.send({ type: "models_list" })
       } else {
         client.connected = false
       }

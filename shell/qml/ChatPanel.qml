@@ -48,9 +48,16 @@ Rectangle {
       mode: chat.client ? chat.client.mode : "command"
       connected: chat.client ? chat.client.connected : false
       streaming: chat.client ? chat.client.streaming : false
+      modelLabel: chat.client ? chat.client.modelLabel : ""
+      thinkingLevel: chat.client ? chat.client.thinkingLevel : ""
+      thinkingLevels: chat.client ? chat.client.thinkingLevels : []
+      models: chat.client ? chat.client.models : []
       onHideRequested: chat.hideRequested()
       onThemeToggleRequested: chat.themeToggleRequested()
       onListToggleRequested: sessionSidebar.open = !sessionSidebar.open
+      onModelRequested: chat.client.requestModels()
+      onModelSelected: function (provider, model) { chat.client.setModel(provider, model) }
+      onThinkingSelected: function (level) { chat.client.setThinkingLevel(level) }
     }
 
     // 消息流：占据剩余高度
@@ -119,6 +126,8 @@ Rectangle {
     theme: chat.theme
     sessions: chat.client ? chat.client.sessions : []
     activeSessionId: chat.client ? chat.client.sessionId : ""
+    skills: chat.client ? chat.client.skills : []
+    plugins: chat.client ? chat.client.plugins : []
     open: false
     onNewSessionRequested: chat.client.newSession()
     onActivateRequested: function (id) {
@@ -126,6 +135,10 @@ Rectangle {
       chat.client.activateSession(id)
     }
     onDeleteRequested: function (id) { chat.client.deleteSession(id) }
+    onSkillsRequested: chat.client.requestSkills()
+    onPluginsRequested: chat.client.requestPlugins()
+    onInstallRequested: function (src) { chat.client.installPlugin(src) }
+    onRemoveRequested: function (src) { chat.client.removePlugin(src) }
   }
 
   // ---- 确认弹窗 ----
