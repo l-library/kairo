@@ -130,6 +130,8 @@ Rectangle {
     plugins: chat.client ? chat.client.plugins : []
     providers: chat.client ? chat.client.providers : []
     currentProvider: chat.client && chat.client.modelLabel ? chat.client.modelLabel.split("/")[0] : ""
+    providerBusy: chat.client ? chat.client.providerBusy : false
+    pluginBusy: chat.client ? chat.client.pluginBusy : false
     open: false
     onNewSessionRequested: chat.client.newSession()
     onActivateRequested: function (id) {

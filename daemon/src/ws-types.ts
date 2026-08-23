@@ -111,6 +111,8 @@ export interface ProviderInfo {
   authed: boolean;
   /** 该提供商下可用模型数 */
   modelCount: number;
+  /** 是否 kairo 自定义（models.json/auth.json 有记录）——只有这些可被移除，SDK 内置提供商不可删 */
+  removable: boolean;
 }
 
 export type BroadcastFn = (event: WsServerEvent) => void;

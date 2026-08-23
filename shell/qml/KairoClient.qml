@@ -29,7 +29,10 @@ Item {
   property var models: [] // [{provider, id, name, reasoning, authed, current}]
   property var skills: [] // [{name, description, path}]
   property var plugins: [] // [{source, scope, installedPath}]
-  property var providers: [] // [{id, authed, modelCount}]
+  property var providers: [] // [{id, authed, modelCount, removable}]
+  // 安装/添加进行中（UI 反馈用）
+  property bool providerBusy: false
+  property bool pluginBusy: false
 
   // ---- 信号（供 UI 订阅） ----
   signal connectionChanged(var state)
@@ -195,11 +198,13 @@ Item {
         case "plugins_response":
         case "plugins_changed":
           client.plugins = ev.plugins || []
+          client.pluginBusy = false
           client.sessionEvent(ev)
           break
         case "providers_response":
         case "providers_changed":
           client.providers = ev.providers || []
+          client.providerBusy = false
           client.sessionEvent(ev)
           break
         case "approval_requested":
@@ -222,6 +227,8 @@ Item {
           client.sessionEvent(ev)
           break
         case "error":
+          client.providerBusy = false
+          client.pluginBusy = false
           client.sessionEvent(ev)
           break
         default:

@@ -590,6 +590,19 @@ export class AgentBridge {
     const mr = this.runtime?.services?.modelRuntime as unknown as KairoModelRuntime | undefined;
     if (!mr) return [];
     const providers = (mr.getProviders?.() ?? []) as unknown[];
+    // 可移除 = kairo 自定义（models.json / auth.json / models-store.json 有记录）；
+    // SDK 内置提供商不可删
+    const modelsJson = this.readJson<{ providers?: Record<string, unknown> }>(
+      join(this.config.agentDir, "models.json"),
+      {},
+    );
+    const auth = this.readJson<Record<string, unknown>>(this.authJsonPath(), {});
+    const store = this.readJson<Record<string, unknown>>(this.modelsStorePath(), {});
+    const custom = new Set([
+      ...Object.keys(modelsJson.providers ?? {}),
+      ...Object.keys(auth),
+      ...Object.keys(store),
+    ]);
     const out: ProviderInfo[] = [];
     for (const p of providers) {
       const pid = typeof p === "string" ? p : (p as { id?: string } | null)?.id ?? String(p);
@@ -597,6 +610,7 @@ export class AgentBridge {
         id: pid,
         authed: !!mr.hasConfiguredAuth?.(pid),
         modelCount: (mr.getModels?.(pid) ?? []).length,
+        removable: custom.has(pid),
       });
     }
     return out;

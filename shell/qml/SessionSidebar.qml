@@ -32,6 +32,8 @@ Item {
   property var plugins: []
   property var providers: []
   property string currentProvider: ""
+  property bool providerBusy: false
+  property bool pluginBusy: false
   property int tab: 0 // 0=会话 1=设置
   property bool open: false
   signal newSessionRequested()
@@ -334,7 +336,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 Rectangle {
                   id: provDel
-                  visible: !isCurrent
+                  visible: modelData.removable && !isCurrent
                   width: 22
                   height: 20
                   radius: 4
@@ -356,18 +358,24 @@ Item {
             }
           }
           Text {
-            text: "添加提供商（baseUrl 留空则用内置目录，如 openai/anthropic…）"
+            text: "添加提供商（baseUrl 留空则用 SDK 内置目录）"
             color: theme ? theme.faint : "#585b70"
             font.pixelSize: 9
             wrapMode: Text.Wrap
             width: parent.width
           }
+          // id
           RowLayout {
             width: parent.width
             spacing: 6
+            Text {
+              text: "id"
+              color: theme ? theme.muted : "#6c7086"
+              font.pixelSize: 10
+              width: 40
+            }
             Rectangle {
               Layout.fillWidth: true
-              Layout.preferredWidth: 90
               height: 26
               radius: 6
               color: theme ? theme.surfaceAlt : "#242437"
@@ -377,12 +385,23 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 background: null
-                placeholderText: "id（如 my-llm）"
-                placeholderTextColor: theme ? theme.faint : "#585b70"
+                placeholderText: "如 my-llm"
+                placeholderTextColor: theme ? theme.muted : "#6c7086"
                 color: theme ? theme.text : "#cdd6f4"
                 font.pixelSize: 10
                 selectByMouse: true
               }
+            }
+          }
+          // api key
+          RowLayout {
+            width: parent.width
+            spacing: 6
+            Text {
+              text: "api key"
+              color: theme ? theme.muted : "#6c7086"
+              font.pixelSize: 10
+              width: 40
             }
             Rectangle {
               Layout.fillWidth: true
@@ -395,56 +414,69 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 background: null
-                placeholderText: "api key"
-                placeholderTextColor: theme ? theme.faint : "#585b70"
+                placeholderText: "sk-…"
+                placeholderTextColor: theme ? theme.muted : "#6c7086"
                 color: theme ? theme.text : "#cdd6f4"
                 font.pixelSize: 10
                 echoMode: TextInput.Password
                 selectByMouse: true
               }
             }
+          }
+          // baseUrl + 添加
+          RowLayout {
+            width: parent.width
+            spacing: 6
+            Text {
+              text: "baseUrl"
+              color: theme ? theme.muted : "#6c7086"
+              font.pixelSize: 10
+              width: 40
+            }
             Rectangle {
-              id: provAddBtn
-              width: 52
+              Layout.fillWidth: true
               height: 26
               radius: 6
-              color: theme ? theme.accent : "#89b4fa"
+              color: theme ? theme.surfaceAlt : "#242437"
+              border.color: theme ? theme.border : "#45475a"
+              QC.TextField {
+                id: provUrlInput
+                anchors.fill: parent
+                anchors.margins: 2
+                background: null
+                placeholderText: "可选，OpenAI 兼容端点"
+                placeholderTextColor: theme ? theme.muted : "#6c7086"
+                color: theme ? theme.text : "#cdd6f4"
+                font.pixelSize: 10
+                selectByMouse: true
+              }
+            }
+            Rectangle {
+              id: provAddBtn
+              width: 62
+              height: 26
+              radius: 6
+              color: sb.providerBusy ? (theme ? theme.yellow : "#f9e2af") : (theme ? theme.accent : "#89b4fa")
               Text {
                 anchors.centerIn: parent
-                text: "添加"
+                text: sb.providerBusy ? "添加中…" : "添加"
                 color: theme ? theme.onAccent : "#ffffff"
                 font.pixelSize: 10
                 font.bold: true
               }
               MouseArea {
                 anchors.fill: parent
+                enabled: !sb.providerBusy
                 onClicked: {
                   var pid = provIdInput.text.trim()
                   var key = provKeyInput.text.trim()
                   if (pid === "" || key === "") return
                   provIdInput.text = ""
                   provKeyInput.text = ""
+                  provUrlInput.text = ""
                   sb.providerAddRequested(pid, key, provUrlInput.text.trim())
                 }
               }
-            }
-          }
-          Rectangle {
-            width: parent.width
-            height: 26
-            radius: 6
-            color: theme ? theme.surfaceAlt : "#242437"
-            border.color: theme ? theme.border : "#45475a"
-            QC.TextField {
-              id: provUrlInput
-              anchors.fill: parent
-              anchors.margins: 2
-              background: null
-              placeholderText: "baseUrl（可选，OpenAI 兼容则自动探测模型列表）"
-              placeholderTextColor: theme ? theme.faint : "#585b70"
-              color: theme ? theme.text : "#cdd6f4"
-              font.pixelSize: 10
-              selectByMouse: true
             }
           }
 
@@ -581,19 +613,20 @@ Item {
             }
             Rectangle {
               id: addBtn
-              width: 52
+              width: 62
               height: 26
               radius: 6
-              color: theme ? theme.accent : "#89b4fa"
+              color: sb.pluginBusy ? (theme ? theme.yellow : "#f9e2af") : (theme ? theme.accent : "#89b4fa")
               Text {
                 anchors.centerIn: parent
-                text: "安装"
+                text: sb.pluginBusy ? "安装中…" : "安装"
                 color: theme ? theme.onAccent : "#ffffff"
                 font.pixelSize: 10
                 font.bold: true
               }
               MouseArea {
                 anchors.fill: parent
+                enabled: !sb.pluginBusy
                 onClicked: {
                   var src = pluginInput.text.trim()
                   if (src === "") return
