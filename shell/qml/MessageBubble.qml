@@ -52,9 +52,12 @@ Item {
       color: isUser ? (bubble.theme ? bubble.theme.surface : "#313244") : "transparent"
       implicitHeight: contentColumn.implicitHeight + 12
 
-      // 气泡级悬停检测已移除：MouseArea 的 containsMouse 受 z 序影响，
-      // 悬停在正文 TextEdit 上时按钮会消失导致点不到。按钮改为常显。
-
+      // 气泡级悬停检测：用 HoverHandler（被动指针处理器，即使子项 TextEdit
+      // 消费了鼠标事件也能感知悬停）——之前用 MouseArea.containsMouse 受 z 序
+      // 影响，悬停文字上时按钮消失。
+      HoverHandler {
+        id: bubbleHover
+      }
       Column {
         id: contentColumn
         x: 8
@@ -116,10 +119,11 @@ Item {
         }
       }
 
-      // 复制按钮：常显在右上角（不依赖悬停——containsMouse 受 z 序影响，
-      // 悬停正文文字时按钮会消失导致点不到）
+      // 复制按钮：悬停气泡时显示在右上角（HoverHandler 检测，悬停文字上
+      // 也不会消失）；平时隐藏不遮挡文字。复制成功短暂变绿「已复制」。
       Rectangle {
         id: copyBtn
+        visible: bubbleHover.hovered || copyBtnArea.containsMouse || bubble.copied
         anchors.right: parent.right
         anchors.rightMargin: 4
         anchors.top: parent.top
