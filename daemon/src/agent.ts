@@ -349,7 +349,14 @@ export class AgentBridge {
       console.log(`[agent] 会话自动命名: ${title}`);
       // 注意：不能广播 session_active——UI 收到它会把消息视图 resetMessages()，
       // 刚完成的对话会被清空（看起来像全新对话）。改广播 status 刷新标题栏名字。
-      this.broadcast({ type: "status", status: this.status() });
+      // 但 agent_end 回调期间 session.isStreaming 仍为 true（SDK 在事件派发后才
+      // 清理），直接广播 status() 会把 streaming=true 带回 UI，导致状态点一直
+      // 黄色、发送按钮卡在「中止」。因此等会话真正空闲后再广播；若一直忙
+      // （用户已发起新一轮）则跳过，名字由 session_list 与下一次 status 承担。
+      await this.waitUntilIdle(session, 3000);
+      if (!session.isStreaming) {
+        this.broadcast({ type: "status", status: this.status() });
+      }
       const list = await this.getSessionList();
       this.broadcast({ type: "session_list", sessions: list });
     } catch (err) {
@@ -751,6 +758,14 @@ export class AgentBridge {
         }
       });
     }, 600);
+  }
+
+  /** 轮询等待会话空闲（isStreaming 变 false），超时则放弃 */
+  private async waitUntilIdle(session: AgentSession, timeoutMs: number): Promise<void> {
+    const start = Date.now();
+    while (session.isStreaming && Date.now() - start < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
   }
 
   /** 探测 OpenAI 兼容 /models 端点（返回模型 id 列表） */
