@@ -58,7 +58,9 @@ ensure_ime_env() {
     fi
   fi
   if [[ -n "$plugin_dir" ]]; then
-    export QT_PLUGIN_PATH="$plugin_dir"
+    # 追加到已有 QT_PLUGIN_PATH 末尾（注释申明的语义），保证手动重启/kill 后
+    # 也不会丢失 fcitx 平台插件路径——丢了会导致面板无法用 fcitx 输入中文。
+    export QT_PLUGIN_PATH="$plugin_dir${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
   fi
 }
 ensure_ime_env
