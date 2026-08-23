@@ -44,9 +44,17 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
   });
 
   wss.on("connection", (ws) => {
-    // 补发状态快照
+    // 补发状态快照 + 当前会话历史回放（同 panel-socket：重连后 UI 恢复消息流）
     ws.send(JSON.stringify({ type: "status", status: agent.status() }));
-    void sessions.list().then((list) => ws.send(JSON.stringify({ type: "session_list", sessions: list })));
+    const active = agent.activeSessionInfo();
+    ws.send(JSON.stringify({ type: "session_active", id: active.id, name: active.name }));
+    const history = agent.currentHistory();
+    if (history.length > 0) {
+      ws.send(JSON.stringify({ type: "session_history", messages: history }));
+    }
+    void sessions.listWithActive(active).then((list) =>
+      ws.send(JSON.stringify({ type: "session_list", sessions: list })),
+    );
 
     ws.on("message", (raw) => {
       let msg: WsClientEvent;

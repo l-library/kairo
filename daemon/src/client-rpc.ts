@@ -47,7 +47,7 @@ export async function handleClientEvent(
       const { id } = await agent.newSession(
         typeof msg.name === "string" && msg.name ? msg.name : undefined,
       );
-      broadcast({ type: "session_list", sessions: await sessions.list() });
+      broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
       void id;
       break;
     }
@@ -59,11 +59,11 @@ export async function handleClientEvent(
       }
       await agent.abort(); // 切换前停止当前流式
       await agent.switchSession(target);
-      broadcast({ type: "session_list", sessions: await sessions.list() });
+      broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
       break;
     }
     case "sessions_delete": {
-      const active = agent.status().sessionId;
+      const active = agent.sessionId;
       if (active === msg.id) {
         broadcast({ type: "error", code: "active_session", message: "不能删除当前活动会话" });
         return;
@@ -73,7 +73,7 @@ export async function handleClientEvent(
         broadcast({ type: "error", code: "session_not_found", message: `会话不存在: ${msg.id}` });
         return;
       }
-      broadcast({ type: "session_list", sessions: await sessions.list() });
+      broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
       break;
     }
     case "theme_set": {
@@ -88,7 +88,14 @@ export async function handleClientEvent(
       break;
     case "get_status":
       broadcast({ type: "status", status: agent.status() });
-      broadcast({ type: "session_list", sessions: await sessions.list() });
+      // 同步当前会话状态与历史（重连/主动拉取后 UI 恢复完整视图）
+      {
+        const active = agent.activeSessionInfo();
+        broadcast({ type: "session_active", id: active.id, name: active.name });
+        const history = agent.currentHistory();
+        if (history.length > 0) broadcast({ type: "session_history", messages: history });
+        broadcast({ type: "session_list", sessions: await sessions.listWithActive(active) });
+      }
       break;
   }
 }

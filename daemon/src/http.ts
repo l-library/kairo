@@ -72,7 +72,7 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
 
         // ---------- 会话 ----------
         case method === "GET" && path === "/api/sessions":
-          sendJson(res, 200, { sessions: await sessions.list() });
+          sendJson(res, 200, { sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
           break;
 
         case method === "POST" && path === "/api/sessions":

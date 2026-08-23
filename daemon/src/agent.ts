@@ -23,7 +23,12 @@ import type { KairoMode } from "./modes.js";
 import { applyMode, modeHint } from "./modes.js";
 import type { ApprovalRegistry } from "./approval.js";
 import { createApprovalGateExtension } from "./approval.js";
-import type { BroadcastFn, SessionStatus, WsServerEvent } from "./ws-types.js";
+import type {
+  BroadcastFn,
+  SessionListItem,
+  SessionStatus,
+  WsServerEvent,
+} from "./ws-types.js";
 
 /** 从 agent 状态提取可渲染历史（用户/助手文本） */
 function buildHistory(session: AgentSession): { role: "user" | "assistant"; text: string }[] {
@@ -244,6 +249,38 @@ export class AgentBridge {
     if (!runtime) throw new Error("daemon 尚未就绪");
     await runtime.switchSession(sessionPath, { cwdOverride: this.config.workdir });
     return { id: runtime.session.sessionId };
+  }
+
+  /** 当前会话可渲染历史（供连接快照/回放；无会话时返回空数组） */
+  currentHistory(): { role: "user" | "assistant"; text: string }[] {
+    const session = this.runtime?.session;
+    return session ? buildHistory(session) : [];
+  }
+
+  /**
+   * 当前活动会话的列表条目（合成项）。
+   * 新建的会话在收到第一条助手消息前不落盘（SDK newSession 的 no-assistant
+   * 保护），磁盘列表会漏掉它；此方法合成一条可见条目供 listWithActive 注入，
+   * 保证 UI 会话列表始终显示并高亮当前会话。
+   */
+  activeSessionInfo(): SessionListItem {
+    const session = this.runtime?.session;
+    const now = new Date().toISOString();
+    return {
+      id: session?.sessionId ?? "",
+      path: session?.sessionManager?.getSessionFile() ?? "",
+      name: currentSessionName(session),
+      cwd: this.config.workdir,
+      createdAt: now,
+      modifiedAt: now,
+      messageCount: 0,
+      firstMessage: "",
+    };
+  }
+
+  /** 当前会话 ID（供调用方判断活动会话） */
+  get sessionId(): string {
+    return this.runtime?.session.sessionId ?? "";
   }
 
   status(): SessionStatus {

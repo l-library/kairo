@@ -47,6 +47,8 @@ export interface SessionListItem {
   createdAt?: string;
   modifiedAt?: string;
   messageCount?: number;
+  /** 首条消息文本（用于 UI 列表摘要；未落盘的新会话为空字符串） */
+  firstMessage?: string;
 }
 
 export interface SessionStatus {

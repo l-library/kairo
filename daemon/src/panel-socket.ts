@@ -59,9 +59,15 @@ export function startPanelSocket(deps: PanelSocketDeps): PanelSocketHandle {
     const send = (event: unknown): void => {
       if (!client.destroyed) client.write(JSON.stringify(event) + "\n");
     };
-    // 连接快照
+    // 连接快照：状态 + 会话列表 + 当前会话历史回放
+    // （session_history 只在 rebindSession 时广播，面板重连早已错过；
+    //   必须在这里补发，否则打开面板永远是空白消息区）
     send({ type: "status", status: agent.status() });
-    void sessions.list().then((list) => send({ type: "session_list", sessions: list }));
+    const active = agent.activeSessionInfo();
+    send({ type: "session_active", id: active.id, name: active.name });
+    const history = agent.currentHistory();
+    if (history.length > 0) send({ type: "session_history", messages: history });
+    void sessions.listWithActive(active).then((list) => send({ type: "session_list", sessions: list }));
 
     const splitter = new LineSplitter((line) => {
       let msg: WsClientEvent;

@@ -4,6 +4,11 @@
  * 会话以 JSONL 平面存储于 sessionDir（文件名 `<timestamp>_<sessionId>.jsonl`）。
  * 列表：SessionManager.listAll(sessionDir) 按 mtime 倒序。
  * 删除：按 id 定位文件后 unlink（活动会话不允许删除）。
+ *
+ * 注意：SDK 的 newSession() 推迟落盘——会话在收到第一条助手消息前不写文件
+ * （flushed=false，_persist 的 no-assistant 保护）。因此新建的空会话在磁盘上
+ * 不存在，list() 会漏掉它；listWithActive() 将当前活动会话合成注入，保证
+ * UI 列表始终可见并高亮当前会话（磁盘上已有则优先用磁盘条目）。
  */
 import { unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -27,7 +32,23 @@ export class KairoSessionManager {
       createdAt: s.created?.toISOString(),
       modifiedAt: s.modified?.toISOString(),
       messageCount: s.messageCount,
+      firstMessage: s.firstMessage ?? "",
     }));
+  }
+
+  /**
+   * 会话列表 + 当前活动会话（磁盘已有则优先用磁盘条目，否则用合成的 active 项），
+   * 活动会话始终置顶。
+   */
+  async listWithActive(active: SessionListItem): Promise<SessionListItem[]> {
+    const list = await this.list();
+    const idx = list.findIndex((s) => s.id === active.id);
+    if (idx >= 0) {
+      const cur = list[idx]!;
+      list.splice(idx, 1);
+      return [cur, ...list];
+    }
+    return [active, ...list];
   }
 
   /** 按 id 定位会话文件路径（列表中的 id 与文件名一致） */
