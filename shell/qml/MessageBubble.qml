@@ -52,12 +52,8 @@ Item {
       color: isUser ? (bubble.theme ? bubble.theme.surface : "#313244") : "transparent"
       implicitHeight: contentColumn.implicitHeight + 12
 
-      // 气泡级悬停区：声明在最底层（z 最下），不干扰正文选择/链接点击
-      MouseArea {
-        id: bubbleHover
-        anchors.fill: parent
-        hoverEnabled: true
-      }
+      // 气泡级悬停检测已移除：MouseArea 的 containsMouse 受 z 序影响，
+      // 悬停在正文 TextEdit 上时按钮会消失导致点不到。按钮改为常显。
 
       Column {
         id: contentColumn
@@ -120,25 +116,27 @@ Item {
         }
       }
 
-      // 复制按钮：气泡悬停时显示在右上角
+      // 复制按钮：常显在右上角（不依赖悬停——containsMouse 受 z 序影响，
+      // 悬停正文文字时按钮会消失导致点不到）
       Rectangle {
         id: copyBtn
-        visible: bubbleHover.containsMouse
         anchors.right: parent.right
         anchors.rightMargin: 4
         anchors.top: parent.top
         anchors.topMargin: 4
-        width: 22
-        height: 22
-        radius: 5
-        color: copyBtnArea.containsMouse || bubble.copied
-          ? (bubble.theme ? bubble.theme.surfaceHover : "#3b4261")
-          : (bubble.theme ? bubble.theme.surface : "#313244")
+        width: copyTxt.implicitWidth + 14
+        height: 20
+        radius: 4
+        color: bubble.copied
+          ? (bubble.theme ? bubble.theme.green : "#a6e3a1")
+          : (copyBtnArea.containsMouse ? (bubble.theme ? bubble.theme.surfaceHover : "#3b4261") : (bubble.theme ? bubble.theme.surfaceAlt : "#242437"))
         Text {
+          id: copyTxt
           anchors.centerIn: parent
-          text: bubble.copied ? "✓" : "📋"
-          color: bubble.theme ? bubble.theme.subtext : "#a6adc8"
-          font.pixelSize: 11
+          text: bubble.copied ? "已复制" : "COPY"
+          color: bubble.copied ? (bubble.theme ? bubble.theme.onAccent : "#1e1e2e") : (bubble.theme ? bubble.theme.subtext : "#a6adc8")
+          font.pixelSize: 9
+          font.bold: true
         }
         MouseArea {
           id: copyBtnArea
