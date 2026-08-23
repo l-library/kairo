@@ -387,6 +387,8 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 | 主题 | 固定深色 | **深/浅双主题**（`Theme.qml` 双色板；标题栏 🌙/☀️ 按钮 + IPC setTheme/getTheme；daemon 持久化到 settings.json `theme` 字段，重启自动恢复） | 用户要求；浅色板为 GitHub 风格（accent #0969da） |
 | daemon 运行 | `/usr/bin/node` | **Node ≥ 24**（pi SDK 要求；`command -v node`） | 宿主 /usr/bin/node 为 v20，undici 报错 |
 | 默认 cwd | `$HOME`（§11） | `~/.local/share/kairo/workdir` 中性目录 | 与 §5.3 隔离策略一致，§11 表格同步更正 |
+| 会话列表 UI（M4 后重构） | 顶部横向 chips | **点击标题栏 ☰ 呼出的左侧边栏**（SessionSidebar，滑入/出动画，纵向列表：命名+首条摘要+消息数，活动高亮，两步确认删除），SessionBar.qml 删除 | ①会话增多后顶部 chips 不可读；②删除按钮被行 MouseArea 遮挡从未生效（M4 遗留，重构中一并修复）；③避免 anchors 覆盖滑出动画 x |
+| 会话命名（M4 后新增） | 手动重命名（未实现） | **AI/启发式自动命名**：`agent_end` 后对未命名会话取首条用户消息，≤24 字直接作标题，否则经 `ModelRuntime.completeSimple`（完整 Context 对象 + `tools:[]`，缺一即触发 SDK `tools.map` 崩溃）生成 ≤12 字中文标题，`setSessionName` 落盘并广播 session_list | 用户要求“AI 自动命名”；短消息直接作标题避免无谓模型调用；模型取 settingsManager 的 defaultProvider/defaultModel（分字段存储，兼容 provider/model 组合格式） |
 | 会话历史回放（M4 修复） | 切换/新建后回放（`session_history`） | **连接快照也补发 `session_active` + `session_history`**（panel-socket/ws 连接时、`get_status` 响应时），并新增 `session_list` 注入当前活动会话（`listWithActive`），`SessionListItem` 透传 `firstMessage`；**SessionBar 改用固定算术定位**（x=8+56+6，宽=父宽-78），弃用 `RowLayout` + `width: parent.width - newBtn.width - 16` | ①面板重连时 `session_history` 已在 rebindSession（启动/新建/切换）时广播完毕，导致打开面板永远是空白消息区；②SDK `newSession` 推迟落盘（首条助手消息前不写文件），新建会话在磁盘列表中缺失、UI 无活动高亮，且 chip 只显示 8 位 UUID 不可读；③**根因：ListView 宽度绑定在 RowLayout 布局期求值为 0（缺测 `listGeo` 实为 [477,4,0,24]），宽度 0 → 无可见 delegate → 会话栏从未真正渲染过（M4 起一直存在）**。修复后实测：激活 110 条会话→消息区回放 54 条可渲染消息，活动 chip 蓝色高亮 |
 
 ## 14. 里程碑状态

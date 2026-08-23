@@ -94,10 +94,22 @@ function currentSessionName(session: AgentSession | undefined): string | undefin
   return session?.sessionManager?.getSessionName() ?? undefined;
 }
 
+/** 自动命名只接触 modelRuntime 的最小结构（避免依赖 SDK 精确类型） */
+interface NamingModelRuntime {
+  getModel(providerId: string, modelId: string): unknown;
+  completeSimple(
+    model: unknown,
+    context: unknown,
+    options?: Record<string, unknown>,
+  ): Promise<{ content: unknown }>;
+}
+
 export class AgentBridge {
   runtime: AgentSessionRuntime | null = null;
   private unsubscribe: (() => void) | null = null;
   private mode: KairoMode;
+  /** 自动命名进行中的会话 id（防重入） */
+  private namingInFlight = new Set<string>();
 
   constructor(
     private config: KairoConfig,
@@ -105,6 +117,8 @@ export class AgentBridge {
     private broadcast: BroadcastFn,
     private persistMode: (mode: KairoMode) => void,
     initialMode: KairoMode,
+    /** 注入列表回调，命名后广播最新会话列表（避免 agent 反向依赖 session-manager） */
+    private getSessionList: () => Promise<SessionListItem[]>,
   ) {
     this.mode = initialMode;
   }
@@ -173,6 +187,10 @@ export class AgentBridge {
     this.unsubscribe = session.subscribe((event) => {
       const ws = normalizeEvent(event);
       if (ws) this.broadcast(ws);
+      // turn 结束后自动命名（仅未命名且有内容的会话）
+      if (event.type === "agent_end") {
+        void this.maybeAutoName(session);
+      }
     });
     this.broadcast({
       type: "session_active",
@@ -249,6 +267,108 @@ export class AgentBridge {
     if (!runtime) throw new Error("daemon 尚未就绪");
     await runtime.switchSession(sessionPath, { cwdOverride: this.config.workdir });
     return { id: runtime.session.sessionId };
+  }
+
+  /**
+   * 自动命名：在 agent_end（rebind/重启恢复/切换/turn 结束）后调用。
+   * 短首条消息直接当标题（零成本）；长消息尝试经当前默认模型精简为 ≤12 字标题，
+   * 失败回退为截断首条消息。命名后广播 session_active + session_list 同步 UI。
+   */
+  private async maybeAutoName(session: AgentSession): Promise<void> {
+    const id = session.sessionId;
+    if (this.namingInFlight.has(id)) return;
+    if (session.sessionManager?.getSessionName()) return; // 已有名字
+    const firstUser = buildHistory(session).find((m) => m.role === "user")?.text;
+    if (!firstUser) return; // 尚无用户消息（空新会话）
+    this.namingInFlight.add(id);
+    try {
+      const clean = firstUser.replace(/\s+/g, " ").trim();
+      const fallback = clean.slice(0, 24);
+      // 短消息虽“启发式”但已是自然标题，避免无谓的模型调用
+      const title =
+        clean.length <= 24 ? clean : await this.generateAiTitle(clean, fallback);
+      if (!title) return;
+      if (this.runtime?.session.sessionId !== id) return; // 命名期间已切会话
+      if (session.sessionManager?.getSessionName()) return; // 已被并发命名
+      session.setSessionName(title);
+      console.log(`[agent] 会话自动命名: ${title}`);
+      this.broadcast({ type: "session_active", id, name: title });
+      const list = await this.getSessionList();
+      this.broadcast({ type: "session_list", sessions: list });
+    } catch (err) {
+      console.error("[agent] 自动命名失败:", err);
+    } finally {
+      this.namingInFlight.delete(id);
+    }
+  }
+
+  /** 经当前默认模型生成中文短标题（不可用时返回回退值） */
+  private async generateAiTitle(clean: string, fallback: string): Promise<string> {
+    try {
+      const services = (this.runtime as unknown as {
+        services?: {
+          modelRuntime?: NamingModelRuntime;
+          settingsManager?: {
+            getDefaultProvider(): string | undefined;
+            getDefaultModel(): string | undefined;
+          };
+        };
+      })?.services;
+      const modelRuntime = services?.modelRuntime;
+      const settingsManager = services?.settingsManager;
+      if (!modelRuntime || !settingsManager) {
+        console.log("[agent] 命名: services 不完整");
+        return fallback;
+      }
+      // kairo 的 settings.json 是 defaultProvider + defaultModel 分开存；
+      // 也兼容 "provider/model" 组合格式
+      let provider = settingsManager.getDefaultProvider() ?? "";
+      let modelId = settingsManager.getDefaultModel() ?? "";
+      const slash = modelId.indexOf("/");
+      if (slash > 0) {
+        if (!provider) provider = modelId.slice(0, slash);
+        modelId = modelId.slice(slash + 1);
+      }
+      if (!provider || !modelId) {
+        console.log("[agent] 命名: 无 provider/model", { provider, modelId });
+        return fallback;
+      }
+      const model = modelRuntime.getModel(provider, modelId);
+      if (!model) {
+        console.log("[agent] 命名: getModel 未命中", provider, modelId);
+        return fallback;
+      }
+      const res = await modelRuntime.completeSimple(
+        model,
+        {
+          // 必须传完整 Context 对象（含 tools:[]）；直接传消息数组会导致 SDK 内部
+          // tools.map 崩溃（Cannot read properties of undefined (reading 'map')）
+          systemPrompt: "你是 kairo 的会话命名助手，只输出简洁的中文短标题。",
+          messages: [
+            {
+              role: "user",
+              content: `请为下面的对话生成一个简洁的中文标题（不超过 12 个字）。只输出标题本身，不要引号、标点或任何解释。\n\n对话开头：${clean.slice(0, 400)}`,
+            },
+          ],
+          tools: [],
+        },
+        { temperature: 0.2, maxTokens: 100 },
+      );
+      const parts = res.content;
+      const text = Array.isArray(parts)
+        ? parts
+            .filter((c) => c && typeof c === "object" && (c as { type?: string }).type === "text")
+            .map((c) => (c as { text?: string }).text ?? "")
+            .join(" ")
+            .trim()
+        : "";
+      const title = text.replace(/^["'“”《》【】\s]+|["'“”《》【】\s]+$/g, "").slice(0, 24);
+      console.log("[agent] 命名: LLM 结果原文=", JSON.stringify(text.slice(0, 80)));
+      return title || fallback;
+    } catch (err) {
+      console.log("[agent] 命名: LLM 调用异常=", err?.constructor?.name, (err as Error)?.message?.slice(0, 120));
+      return fallback;
+    }
   }
 
   /** 当前会话可渲染历史（供连接快照/回放；无会话时返回空数组） */

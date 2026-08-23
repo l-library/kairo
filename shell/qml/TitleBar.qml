@@ -15,6 +15,7 @@ Item {
   property bool streaming: false
   signal hideRequested()
   signal themeToggleRequested()
+  signal listToggleRequested()
 
   readonly property bool isLight: theme && theme.palette === "light"
 
@@ -65,6 +66,31 @@ Item {
         color: tb.mode === "command" ? tb.theme.accent : tb.theme.subtext
         font.pixelSize: 10
         font.bold: true
+      }
+    }
+
+    // 会话列表（呼出侧边栏）
+    Rectangle {
+      id: listBtn
+      anchors.right: themeBtn.left
+      anchors.rightMargin: 4
+      anchors.verticalCenter: parent.verticalCenter
+      width: 22
+      height: 22
+      radius: 5
+      color: "transparent"
+      Text {
+        anchors.centerIn: parent
+        text: "☰"
+        color: tb.theme ? tb.theme.subtext : "#a6adc8"
+        font.pixelSize: 12
+      }
+      MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        onClicked: tb.listToggleRequested()
+        onEntered: listBtn.color = tb.theme.surface
+        onExited: listBtn.color = "transparent"
       }
     }
 

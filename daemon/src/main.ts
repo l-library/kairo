@@ -85,7 +85,14 @@ const approvals = new ApprovalRegistry(config, {
 });
 
 // --- AgentBridge / 会话管理 ---
-const agent = new AgentBridge(config, approvals, broadcast, persistMode, savedMode);
+const agent = new AgentBridge(
+  config,
+  approvals,
+  broadcast,
+  persistMode,
+  savedMode,
+  () => sessions.listWithActive(agent.activeSessionInfo()),
+);
 const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });
 
 // --- HTTP + WS ---

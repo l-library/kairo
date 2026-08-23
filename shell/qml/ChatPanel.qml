@@ -50,17 +50,7 @@ Rectangle {
       streaming: chat.client ? chat.client.streaming : false
       onHideRequested: chat.hideRequested()
       onThemeToggleRequested: chat.themeToggleRequested()
-    }
-
-    SessionBar {
-      id: sessionBar
-      Layout.fillWidth: true
-      theme: chat.theme
-      sessions: chat.client ? chat.client.sessions : []
-      activeSessionId: chat.client ? chat.client.sessionId : ""
-      onNewSessionRequested: chat.client.newSession()
-      onActivateRequested: function (id) { chat.client.activateSession(id) }
-      onDeleteRequested: function (id) { chat.client.deleteSession(id) }
+      onListToggleRequested: sessionSidebar.open = !sessionSidebar.open
     }
 
     // 消息流：占据剩余高度
@@ -118,6 +108,24 @@ Rectangle {
       onModeRequested: function (mode) { chat.client.setMode(mode) }
       onAbortRequested: chat.client.abort()
     }
+  }
+
+  // ---- 会话侧边栏（覆盖在消息区上方，☰ 呼出） ----
+  // 定位用 x/y 显式传参，不能靠 anchors（anchors 会覆盖滑出动画用的 x）
+  SessionSidebar {
+    id: sessionSidebar
+    topOffset: titleBar.height
+    bottomOffset: inputBar.implicitHeight
+    theme: chat.theme
+    sessions: chat.client ? chat.client.sessions : []
+    activeSessionId: chat.client ? chat.client.sessionId : ""
+    open: false
+    onNewSessionRequested: chat.client.newSession()
+    onActivateRequested: function (id) {
+      sessionSidebar.open = false
+      chat.client.activateSession(id)
+    }
+    onDeleteRequested: function (id) { chat.client.deleteSession(id) }
   }
 
   // ---- 确认弹窗 ----
@@ -375,9 +383,11 @@ Rectangle {
     }
   }
 
-  // 面板级按键：Esc 隐藏（确认弹窗打开时改为拒绝）
+  // 面板级按键：Esc 依次关闭侧边栏/拒绝确认/隐藏面板
   Keys.onEscapePressed: {
-    if (chat.client && chat.client.pendingApproval) {
+    if (sessionSidebar.open) {
+      sessionSidebar.open = false
+    } else if (chat.client && chat.client.pendingApproval) {
       chat.client.respondApproval(false)
     } else {
       chat.hideRequested()
@@ -389,12 +399,21 @@ Rectangle {
     inputBar.focusInput()
   }
 
+  // 临时调试：侧边栏开合状态
+  function getSidebarOpen() {
+    return sessionSidebar ? sessionSidebar.open : false
+  }
+
+  function setSidebarOpen(open) {
+    if (sessionSidebar) sessionSidebar.open = open
+  }
+
   // 布局诊断（IPC getDebugInfo 用）
   function getLayoutDebug() {
     return JSON.stringify({
       window: parent ? parent.height : -1,
       title: titleBar.height,
-      session: sessionBar.height,
+      sidebar: sessionSidebar ? sessionSidebar.height : 0,
       list: listArea.height,
       input: inputBar.height,
       inputImplicit: inputBar.implicitHeight,

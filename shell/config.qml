@@ -172,6 +172,11 @@ PanelWindow {
         layout: chat.getLayoutDebug(),
       })
     }
+
+    // 侧边栏：IPC 呼出/收起（可绑自定义快捷键）
+    function toggleSidebar(): void {
+      chat.setSidebarOpen(!chat.getSidebarOpen())
+    }
   }
 
   Component.onCompleted: {
