@@ -2,8 +2,26 @@
 
 Hyprland 上的即用型桌面 AI 助手：**quickshell 浮窗（QML）** + **PI SDK（Node daemon）**。
 
-- **Chat 模式**：纯对话，无工具调用。
-- **Command 模式**：完整 agentic（读文件/写文件/执行命令），写操作先弹 diff 确认、跑命令先确认。
+`Super+A` 随叫随用，Chat / Command 双模式：纯对话不碰工具，完整 agentic 时写操作先弹 diff 确认、跑命令先确认。
+
+## 功能特性
+
+- **双模式**：Chat 纯对话（无工具调用）；Command 完整 agentic（read/write/edit/bash/grep/find/ls 共 7 个内置工具）。
+- **安全确认门**：写操作先生成 diff、跑命令先确认全文才放行；只读工具自动批准。
+- **配置隔离**：独立 PI 配置目录 `~/.config/kairo/agent`（mcp / skills / plugins / 会话均与 `~/.pi` 无关）。
+- **会话管理**：单活跃会话 + 历史会话列表，支持新建 / 切换 / 删除。
+- **流式 Markdown 渲染**：气泡化回复、工具卡、审批对话框，中文输入开箱即用。
+- **systemd 托管**：daemon 常驻并自动恢复最近会话，面板由 Hyprland keybind 唤起。
+
+## 截图
+
+| Chat 模式：纯对话 | Command 模式：工具调用（web_search） |
+|---|---|
+| ![Chat 模式](assets/chat.png) | ![Command 模式](assets/cmd.png) |
+
+| Command 模式：代码写入 | 设置面板：Provider 与技能 |
+|---|---|
+| ![代码写入](assets/code_write.png) | ![设置面板](assets/setting.png) |
 
 ## 前置依赖
 
@@ -71,3 +89,24 @@ kairo 使用独立 PI 配置目录 `~/.config/kairo/agent`（mcp/skills/plugins/
 M0 技术验证 ✅ · M1 daemon 骨架 ✅ · M2 浮窗+聊天 ✅ · M3 Command 模式 ✅ · M4 会话与打磨 ✅
 
 完整方案与决策记录见 [PLAN.md](PLAN.md)。
+
+## 演示
+
+Command 模式下的真实工作流：向 AI 提出视频处理需求，它给出多种方案（ffmpeg 转码 / mpv·vlc 播放），
+命令执行前弹出确认卡，批准后生成无音轨视频 `video_noaudio.mp4`。
+
+<video src="assets/display.mp4" controls preload="metadata" width="100%"></video>
+
+*若视频无法播放，可直接[下载 assets/display.mp4](assets/display.mp4) 查看。*
+
+## 贡献
+
+欢迎提交 Issue 与 PR。
+
+- `daemon/` 为 npm workspace：改动后 `npm run build`，再 `kairoctl restart` 生效。
+- `shell/` 为 quickshell QML：改动后刷新浮窗即可。
+- 完整的实现方案与决策记录见 [PLAN.md](PLAN.md)。
+
+## 许可证
+
+尚未附带开源许可证，代码默认保留所有权利。
