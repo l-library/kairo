@@ -187,6 +187,138 @@ function mdToHtml(md, palette) {
   return html
 }
 
+// ================= 对话段检测 =================
+//
+// 用途：AI 一次输出里常混有多段对话（小明：… / 小红：… 连续多行），
+// 渲染层需要把它们拆成独立的气泡卡片，避免全部连成一大段。
+
+/**
+ * speakerParts(line) → { name, rest } 或 null
+ * 解析"说话人：内容"行，兼容 Markdown 前缀（- 1. >）。
+ * 排除"标签型"冒号句（注意：/功能：/优点：…），避免把说明清单误判成对话。
+ */
+function speakerParts(line) {
+  var l = String(line).trim()
+  // 兼容 Markdown 列表/引用前缀：- 小明：…  1. 小明：…  > 小明：…
+  l = l.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").replace(/^>\s?/, "")
+  var m = /^([\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9_\-·]{0,14}?)[:：]\s*(.+)$/.exec(l)
+  if (!m) return null
+  var name = m[1]
+  var rest = m[2].trim()
+  if (!rest) return null
+  // 去掉"X说/X问道…"类引述词，名牌只留说话人名
+  name = name.replace(/(说道|问道|答道|回答|笑着说|大声说|低声说|喃喃道|叹道|笑道|叫道|喊道|说|问|答)$/, "")
+  if (!name) return null
+  // 常见"标签：内容"结构（说明/注意/功能/优点…），说话人名不应命中这些词；
+  // 允许带后缀的复合标签：第一段 / 注意事项 / 另一方面…
+  if (/^(注意|提示|警告|说明|备注|例如|比如|总结|结论|结果|原因|功能|优点|缺点|用法|语法|示例|例子|步骤|参考|特点|方法|作用|定义|区别|来源|建议|补充|总之|综上|输出|错误|问题|答案|解决|方案|参数|返回值|环境|依赖|地址|链接|格式|详情|名称|状态|类型|数量|大小|版本|命令|路径|项目|文件|目录|用户|系统|模型|对话|消息|内容|时间|日期|标题|文档|教程|指南|默认|必须|表示|即|如下|如下所示|第一|第二|第三|第四|首先|其次|最后|接着|然后)(段|部分|章|节|点|条|项|步|个|种|方面|内容|情况|事项|说明|建议|提示)?[:：]/.test(name + "：")) {
+    return null
+  }
+  // 说话内容特征：含引号，或以句末标点（。！？…!?）收尾
+  if (/[「」『』"'“”]/.test(rest) || /[。！？…!?]$/.test(rest)) {
+    return { name: name, rest: rest }
+  }
+  return null
+}
+
+/** 去掉整句外层的成对引号（「」『』“”""），气泡内展示更干净 */
+function stripOuterQuotes(s) {
+  var t = String(s).trim()
+  if (t.length >= 2) {
+    var a = t.charAt(0), b = t.charAt(t.length - 1)
+    var pairs = ["「」", "『』", "“”", "\"\"", "''"]
+    for (var i = 0; i < pairs.length; i++) {
+      if (a === pairs[i].charAt(0) && b === pairs[i].charAt(1)) {
+        return t.slice(1, -1).trim()
+      }
+    }
+  }
+  return t
+}
+
+/** 该行是否为"说话人：内容"结构 */
+function isSpeakerLine(line) {
+  return speakerParts(line) !== null
+}
+
+/**
+ * isDialogueSegment(text) → bool
+ * 一段（空行分隔）内 ≥2 句说话人冒号句，且至少含引号或 ≥2 句带句末标点，
+ * 才认定为对话段——避免"功能：xxx\n优点：xxx"这种标签清单被误判。
+ */
+function isDialogueSegment(text) {
+  var lines = String(text).split("\n")
+  var hits = 0, quoted = 0, punct = 0
+  for (var i = 0; i < lines.length; i++) {
+    var sp = speakerParts(lines[i])
+    if (!sp) continue
+    hits++
+    if (/[「」『』"'“”]/.test(sp.rest)) quoted++
+    else if (/[。！？…!?]$/.test(sp.rest)) punct++
+  }
+  return hits >= 2 && (quoted >= 1 || punct >= 2)
+}
+
+/**
+ * splitSegments(md) → [{ text, kind }]
+ * 按空行把一条消息切成若干"段"（``` 代码块内部不切）；
+ * kind: "dialogue"（对话段）| "narrative"（普通段）。
+ * 含代码块的段一律视为普通段，避免对话渲染破坏代码排版。
+ */
+function splitSegments(md) {
+  if (!md) return []
+  var lines = String(md).replace(/\r\n/g, "\n").split("\n")
+  var segs = [], cur = [], inFence = false, hasFence = false, first = true
+  function flush() {
+    if (!cur.length) return
+    var text = cur.join("\n")
+    var kind = (!hasFence && isDialogueSegment(text)) ? "dialogue" : "narrative"
+    segs.push({ text: text, kind: kind, first: first })
+    cur = []
+    hasFence = false
+    first = false
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    if (/^```/.test(line.trim())) { inFence = !inFence; hasFence = true }
+    if (!inFence && !line.trim()) { flush(); continue }
+    cur.push(line)
+  }
+  flush()
+  return segs
+}
+
+/**
+ * dialogueGroups(text) → [{ kind: "group", name, texts[], side } | { kind: "plain", text }]
+ * 对话段内的渲染单元：连续同说话人的行合并为一组气泡（texts 多行），
+ * 组间按出现顺序左右交替（side: "left"|"right"）；非说话人行作为 plain 原样渲染。
+ */
+function dialogueGroups(text) {
+  var lines = String(text).split("\n")
+  var out = []
+  var groupCount = 0
+  for (var i = 0; i < lines.length; i++) {
+    var sp = speakerParts(lines[i])
+    if (sp) {
+      var last = out.length ? out[out.length - 1] : null
+      if (last && last.kind === "group" && last.name === sp.name) {
+        last.texts.push(sp.rest)
+      } else {
+        out.push({
+          kind: "group",
+          name: sp.name,
+          texts: [stripOuterQuotes(sp.rest)],
+          side: groupCount++ % 2 === 0 ? "left" : "right",
+        })
+      }
+    } else {
+      var l = lines[i].trim()
+      if (l) out.push({ kind: "plain", text: l })
+    }
+  }
+  return out
+}
+
 /** 生成本文纯文本摘要（会话列表用） */
 function plainText(md) {
   if (!md) return ""

@@ -32,6 +32,8 @@ Item {
   readonly property color d_divider: "#2a2b3a"
   readonly property color d_overlay: "#80000000"
   readonly property color d_emptyHint: "#45475a"
+  // 用户消息气泡：surface 混入 accent 的蓝调，与助手灰调气泡区分
+  readonly property color d_userBubble: "#4b597a"
 
   // ---------- 浅色（GitHub 风格） ----------
   readonly property color l_bg: "#f6f8fa"
@@ -52,6 +54,8 @@ Item {
   readonly property color l_divider: "#d8dee4"
   readonly property color l_overlay: "#40ffffff"
   readonly property color l_emptyHint: "#b0b8c0"
+  // 用户消息气泡（浅色）：#e9edf2 混入 accent #0969da
+  readonly property color l_userBubble: "#c7d9ee"
 
   // ---------- 当前主题色 ----------
   readonly property bool isDark: palette === "dark"
@@ -74,6 +78,7 @@ Item {
   readonly property color divider: isDark ? d_divider : l_divider
   readonly property color overlay: isDark ? d_overlay : l_overlay
   readonly property color emptyHint: isDark ? d_emptyHint : l_emptyHint
+  readonly property color userBubble: isDark ? d_userBubble : l_userBubble
   /** 彩色按钮上的文字色（绿/蓝/红底） */
   readonly property color onAccent: isDark ? "#1e1e2e" : "#ffffff"
 }

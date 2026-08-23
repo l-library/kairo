@@ -74,7 +74,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 10
         clip: true
-        spacing: 8
+        spacing: 12
         model: messageModel
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
