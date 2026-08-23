@@ -69,8 +69,10 @@ Item {
           text: {
             var palette = {
               codeBg: bubble.theme ? bubble.theme.codeBg : "#171720",
+              codeText: bubble.theme ? bubble.theme.text : "#cdd6f4",
               accent: bubble.theme ? bubble.theme.accent : "#89b4fa",
               muted: bubble.theme ? bubble.theme.muted : "#a6adc8",
+              border: bubble.theme ? bubble.theme.border : "#45475a",
             }
             return Md.mdToHtml(row.text || "", palette)
           }

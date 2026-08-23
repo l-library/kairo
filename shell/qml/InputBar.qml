@@ -128,7 +128,12 @@ Item {
         id: editor
         anchors.fill: parent
         anchors.margins: 6
+        // Quick Controls TextArea 自带系统浅色默认背景，暗色模式下会盖住外层
+        // surfaceAlt 深色底并让浅色文字难以辨认——必须移除，改用外层 Rectangle
+        background: null
         color: inputBar.theme ? inputBar.theme.text : "#cdd6f4"
+        selectionColor: inputBar.theme ? inputBar.theme.accent : "#89b4fa"
+        selectedTextColor: inputBar.theme ? inputBar.theme.onAccent : "#1e1e2e"
         placeholderText: inputBar.streaming ? "助手回复中…（发送将排队）" : "输入消息…"
         placeholderTextColor: inputBar.theme ? inputBar.theme.faint : "#585b70"
         font.pixelSize: 12
