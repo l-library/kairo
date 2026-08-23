@@ -34,6 +34,7 @@ export type WsServerEvent =
   | { type: "mode_changed"; mode: string }
   | { type: "theme_changed"; theme: string }
   | { type: "session_active"; id: string; name?: string }
+  | { type: "session_history"; messages: { role: "user" | "assistant"; text: string }[] }
   | { type: "session_list"; sessions: SessionListItem[] }
   | { type: "status"; status: SessionStatus }
   | { type: "error"; code: string; message: string };

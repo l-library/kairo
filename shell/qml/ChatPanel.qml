@@ -230,6 +230,23 @@ Rectangle {
       case "session_active":
         chat.resetMessages()
         break
+      case "session_history": {
+        // 激活/切换后的历史回放（紧跟在 session_active 后）
+        chat.resetMessages()
+        var msgs = ev.messages || []
+        for (var k = 0; k < msgs.length; k++) {
+          messageModel.append({
+            id: "h" + k,
+            role: msgs[k].role,
+            text: msgs[k].text,
+            thinking: "",
+            thinkingOpen: false,
+            tools: [],
+            status: "done",
+          })
+        }
+        break
+      }
       case "error":
         chat.pushSystemMessage(ev.message || "发生错误")
         break

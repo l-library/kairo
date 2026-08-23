@@ -25,6 +25,24 @@ import type { ApprovalRegistry } from "./approval.js";
 import { createApprovalGateExtension } from "./approval.js";
 import type { BroadcastFn, SessionStatus, WsServerEvent } from "./ws-types.js";
 
+/** 从 agent 状态提取可渲染历史（用户/助手文本） */
+function buildHistory(session: AgentSession): { role: "user" | "assistant"; text: string }[] {
+  const out: { role: "user" | "assistant"; text: string }[] = [];
+  for (const m of session.agent.state.messages) {
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    const content = (m as { content?: { type?: string; text?: string }[] }).content;
+    if (!Array.isArray(content)) continue;
+    const text = content
+      .filter((c) => c && c.type === "text" && typeof c.text === "string")
+      .map((c) => c.text as string)
+      .join("\n")
+      .trim();
+    if (!text) continue;
+    out.push({ role: m.role, text });
+  }
+  return out;
+}
+
 /** SDK 事件 → WS 事件（服务端广播） */
 function normalizeEvent(event: AgentSessionEvent): WsServerEvent | null {
   switch (event.type) {
@@ -156,6 +174,11 @@ export class AgentBridge {
       id: session.sessionId,
       name: currentSessionName(session),
     });
+    // 会话历史回放（新建/切换后 UI 恢复消息流）
+    const history = buildHistory(session);
+    if (history.length > 0) {
+      this.broadcast({ type: "session_history", messages: history });
+    }
     this.broadcast({ type: "status", status: this.status() });
   }
 
