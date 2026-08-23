@@ -112,6 +112,7 @@ Item {
         spacing: 4
         model: sb.sessions
         delegate: Rectangle {
+          id: row
           required property var modelData
           readonly property bool isActive: modelData.id === sb.activeSessionId
           property bool armed: false
@@ -128,7 +129,8 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             onClicked: {
-              if (parent.armed) { parent.armed = false; return }
+              // 处于确认态时点击行 = 取消确认，不切换会话
+              if (row.armed) { row.armed = false; return }
               if (!isActive) sb.activateRequested(modelData.id)
             }
           }
@@ -173,36 +175,39 @@ Item {
             Rectangle {
               id: delBtn
               visible: !isActive
-              width: armed ? 52 : 22
+              width: row.armed ? 64 : 22
               height: 22
               radius: 5
-              color: armed ? (theme ? theme.red : "#f38ba8") : "transparent"
+              // 纯绑定：armed→红底；悬停→浅色。不用 onEntered 赋值（会破坏绑定）
+              color: row.armed
+                ? (theme ? theme.red : "#f38ba8")
+                : (delMA.containsMouse ? (theme ? theme.surfaceHover : "#3b4261") : "transparent")
               Text {
                 anchors.centerIn: parent
-                text: armed ? "确认" : "🗑"
-                color: armed ? "#ffffff" : (theme ? theme.muted : "#6c7086")
-                font.pixelSize: armed ? 10 : 9
+                text: row.armed ? "确认删除" : "🗑"
+                color: row.armed ? "#ffffff" : (theme ? theme.muted : "#6c7086")
+                font.pixelSize: row.armed ? 10 : 9
               }
               MouseArea {
                 id: delMA
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: {
-                  if (parent.armed) {
-                    parent.armed = false
+                  // 注意：armed 是 delegate 根（row）的属性——直接写 parent.armed 会
+                  // 落到 delBtn 的动态属性上（两处 armed 不同源），确认态永远不可见。
+                  if (row.armed) {
+                    row.armed = false
                     sb.deleteRequested(modelData.id)
                   } else {
-                    parent.armed = true
+                    row.armed = true
                     disarmTimer.restart()
                   }
                 }
-                onEntered: delBtn.color = armed ? (theme ? theme.red : "#f38ba8") : (theme ? theme.surfaceHover : "#3b4261")
-                onExited: delBtn.color = armed ? (theme ? theme.red : "#f38ba8") : "transparent"
               }
               Timer {
                 id: disarmTimer
                 interval: 3000
-                onTriggered: parent.armed = false
+                onTriggered: row.armed = false
               }
             }
           }
