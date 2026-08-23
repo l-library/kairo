@@ -1,14 +1,15 @@
-# kairo — 追加到 ~/.config/hypr/hyprland.conf 的片段（install.sh 自动写入，可手动复制）
+# kairo — 追加到 ~/.config/hypr/hyprland.conf 的片段（install.sh 自动写入并替换 __KAIRO_REPO__ 为仓库路径）
+# 手动复制时：请将 __KAIRO_REPO__ 替换为仓库实际路径（或先跑一次 install.sh 让脚本代写）
 
 # 桌面启动时拉起 kairo 浮窗进程（默认隐藏，Super+A 唤起）
-exec-once = /home/liborui/Documents/kairo/scripts/toggle-kairo.sh --start-safe
+exec-once = __KAIRO_REPO__/scripts/toggle-kairo.sh --start-safe
 
 # 唤起/隐藏浮窗
-bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
+bind = SUPER, A, exec, __KAIRO_REPO__/scripts/toggle-kairo.sh
 
 # 主题切换可从外部调用：
-#   quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo setTheme light
-# 例如绑定：bind = SUPER, T, exec, quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo setTheme light
+#   quickshell ipc -p __KAIRO_REPO__/shell/config.qml call kairo setTheme light
+# 例如绑定：bind = SUPER, T, exec, quickshell ipc -p __KAIRO_REPO__/shell/config.qml call kairo setTheme light
 
 # ---- 动画说明 ----
 # kairo 浮窗是 layer-shell 窗口（PanelWindow），Hyprland 的 windowsIn/windowrule

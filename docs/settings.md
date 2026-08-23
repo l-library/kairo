@@ -46,11 +46,12 @@
 
 ## Hyprland 集成
 
-`shell/hyprland.conf.snippet`：
+`shell/hyprland.conf.snippet`（install.sh 写入时会把 `__KAIRO_REPO__` 替换为仓库实际路径；
+手动复制时自行替换）：
 
 ```ini
-exec-once = /home/liborui/Documents/kairo/scripts/toggle-kairo.sh --start-safe
-bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
+exec-once = __KAIRO_REPO__/scripts/toggle-kairo.sh --start-safe
+bind = SUPER, A, exec, __KAIRO_REPO__/scripts/toggle-kairo.sh
 ```
 
 更换唤起键直接改 `bind` 行即可。
@@ -62,8 +63,8 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 **主题外部切换**（可选绑定）：
 
 ```bash
-quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo setTheme light
-quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo getTheme
+quickshell ipc -p __KAIRO_REPO__/shell/config.qml call kairo setTheme light
+quickshell ipc -p __KAIRO_REPO__/shell/config.qml call kairo getTheme
 ```
 
 ## 故障排查
@@ -71,7 +72,7 @@ quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo getTheme
 | 症状 | 处理 |
 |------|------|
 | daemon 反复退出 | `journalctl --user -u kairo-daemon -e` 查看原因 |
-| 面板连不上 | `quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo getDebugInfo` 看 connected 字段 |
+| 面板连不上 | `quickshell ipc -p __KAIRO_REPO__/shell/config.qml call kairo getDebugInfo` 看 connected 字段 |
 | 面板唤不起（日志报 `EGL not available`） | GDM→Hyprland 的 exec 环境没有 nix mesa 的 `__EGL_VENDOR_LIBRARY_DIRS`；toggle-kairo.sh 已自动注入（从 store 选最新含 egl_vendor.d 的 mesa），若 nix 升级后仍异常可手动重跑 `./scripts/toggle-kairo.sh` |
 | 面板内无法打中文 | 原因：系统 fcitx5-qt 插件由 Qt 6.4 构建，与 nix Qt 6.11 ABI 不兼容（undefined symbol Qt_6_PRIVATE_API）；nix QtWayland 客户端又未编译 text-input 协议。修复：toggle-kairo.sh 自动将 `nixpkgs#qt6Packages.fcitx5-qt`（与 quickshell 同 Qt 6.11.1）的插件目录注入 QT_PLUGIN_PATH，fcitx 插件经 D-Bus 连系统 fcitx5。验证：/proc/<pid>/maps 含 10 处 fcitx 映射 |
 | 密钥失效 | `kairoctl reimport` 重新导入 |

@@ -5,11 +5,24 @@ Hyprland 上的即用型桌面 AI 助手：**quickshell 浮窗（QML）** + **PI
 - **Chat 模式**：纯对话，无工具调用。
 - **Command 模式**：完整 agentic（读文件/写文件/执行命令），写操作先弹 diff 确认、跑命令先确认。
 
+## 前置依赖
+
+| 依赖 | 要求 | 说明 |
+|------|------|------|
+| Hyprland | 运行环境 | 浮窗为 layer-shell 窗口 |
+| Node.js | ≥ 24 | daemon 构建与运行（`install.sh` 会自动检查版本） |
+| pi（PI Coding Agent） | 已安装并完成 provider 登录 | 密钥从 `~/.pi/agent` 导入；暂无密钥也能装完，稍后 `kairoctl reimport` |
+| quickshell | ≥ 0.3 | 浮窗渲染。`nix profile install nixpkgs#quickshell` 或发行版包 / AUR |
+| python3 | 任意 | `kairoctl status` 解析 JSON |
+| fcitx5 | 可选 | 面板中文输入；nix 环境由 toggle-kairo.sh 自动处理 |
+
+仓库位置不限——安装脚本会自动把实际路径写入 systemd 单元与 Hyprland 片段。
+
 ## 快速开始
 
 ```bash
 # 1. 安装（构建 daemon → systemd 单元 → 导入密钥 → 写入 Hyprland 片段）
-./scripts/install.sh
+./scripts/install.sh            # 尚未配置 pi 密钥时加 --skip-setup，稍后 kairoctl reimport
 
 # 2. 唤起浮窗（Super+A，或手动）
 ./scripts/toggle-kairo.sh

@@ -16,8 +16,11 @@ echo "==> 源目录: $HOST_AGENT_DIR"
 echo "==> 目标目录: $KAIRO_AGENT_DIR"
 
 if [[ ! -d "$HOST_AGENT_DIR" ]]; then
-  echo "错误: 宿主 agent 目录不存在: $HOST_AGENT_DIR（可设置 KAIRO_HOST_AGENT_DIR 覆盖）" >&2
-  exit 1
+  echo "!! 宿主 agent 目录不存在: $HOST_AGENT_DIR（可设置 KAIRO_HOST_AGENT_DIR 覆盖）" >&2
+  echo "    kairo 会继续完成安装；之后任选一种方式配置密钥：" >&2
+  echo "      1) 在本机安装 pi 并登录 provider 后执行: kairoctl reimport" >&2
+  echo "      2) 手动放置密钥到: $KAIRO_AGENT_DIR/auth.json" >&2
+  exit 0
 fi
 
 mkdir -p "$KAIRO_AGENT_DIR"
@@ -77,6 +80,8 @@ if [[ -f "$KAIRO_AGENT_DIR/auth.json" ]]; then
   echo "==> 完成。kairo agentDir 就绪: $KAIRO_AGENT_DIR"
   ls -la "$KAIRO_AGENT_DIR"
 else
-  echo "!! 未找到可用密钥。请手动将 provider 密钥放入 $KAIRO_AGENT_DIR/auth.json 后再启动。" >&2
-  exit 1
+  echo "!! 未找到可用密钥。kairo 可继续安装，但模型调用将无法鉴权。" >&2
+  echo "    稍后任选一种方式配置：" >&2
+  echo "      1) 在本机完成 pi 的 provider 登录后执行: kairoctl reimport" >&2
+  echo "      2) 手动将密钥放入 $KAIRO_AGENT_DIR/auth.json，然后 kairoctl restart" >&2
 fi

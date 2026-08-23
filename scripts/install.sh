@@ -4,6 +4,7 @@
 #   2) 安装并启用 systemd --user 单元
 #   3) setup.sh 一次性导入 provider 密钥
 #   4) 写入 Hyprland 片段（需确认）
+# 用法: ./scripts/install.sh [--skip-setup]
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,6 +12,44 @@ DAEMON_DIR="$REPO_DIR/daemon"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 SERVICE_NAME="kairo-daemon.service"
 HYPR_CONF="${HYPRLAND_CONF:-$HOME/.config/hypr/hyprland.conf}"
+
+# --- 参数 ---
+SKIP_SETUP=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-setup) SKIP_SETUP=1 ;;
+    -h|--help)
+      echo "用法: $(basename "$0") [--skip-setup]" >&2
+      echo "  --skip-setup  跳过 provider 密钥导入（稍后可用 kairoctl reimport）" >&2
+      exit 0
+      ;;
+    *)
+      echo "未知参数: $arg（--help 查看用法）" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# --- 前置检查 ---
+require_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "!! 未找到 node。需要 Node ≥ 24（pi SDK 与 daemon 的运行时要求）。" >&2
+    exit 1
+  fi
+  local major
+  major="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
+  if [[ "$major" -lt 24 ]]; then
+    echo "!! Node 版本过低: $(node --version)（需要 ≥ 24）" >&2
+    exit 1
+  fi
+  echo "    node: $(node --version) ✅"
+}
+require_node
+
+if ! command -v quickshell >/dev/null 2>&1 && [[ ! -x "$HOME/.nix-profile/bin/quickshell" ]]; then
+  echo "!! 未检测到 quickshell——daemon 照常安装，但 Super+A 浮窗不可用。" >&2
+  echo "    安装参考: nix profile install nixpkgs#quickshell（或发行版包 / AUR）" >&2
+fi
 
 echo "==> [1/4] 构建 daemon…"
 cd "$DAEMON_DIR"
@@ -34,10 +73,12 @@ if ! systemctl --user is-active --quiet "$SERVICE_NAME"; then
 fi
 echo "    kairo-daemon 运行中 ✅"
 
-echo "==> [3/4] 导入 provider 密钥…"
-"$REPO_DIR/scripts/setup.sh"
-
-echo "==> [3b] 同步内置技能（kairo-skills）…"
+echo "==> [3/4] 导入 provider 密钥 + 同步内置技能…"
+if [[ "$SKIP_SETUP" -eq 1 ]]; then
+  echo "    已跳过密钥导入（--skip-setup）。稍后可用: kairoctl reimport"
+else
+  "$REPO_DIR/scripts/setup.sh"
+fi
 KAIRO_SKILLS="$HOME/.config/kairo/agent/skills"
 mkdir -p "$KAIRO_SKILLS"
 cp -rn "$REPO_DIR/skills/kairo-skills" "$KAIRO_SKILLS/"
@@ -51,11 +92,11 @@ echo "==> [4/4] 写入 Hyprland 片段…"
 read -r -p "    将片段追加到 $HYPR_CONF？（y/N）" yes
 if [[ "$yes" =~ ^[Yy]$ ]]; then
   if [[ -f "$HYPR_CONF" ]]; then cp -f "$HYPR_CONF" "$HYPR_CONF.kairo.bak"; fi
-  { echo ""; cat "$REPO_DIR/shell/hyprland.conf.snippet"; } >> "$HYPR_CONF"
+  { echo ""; sed -e "s|__KAIRO_REPO__|$REPO_DIR|g" "$REPO_DIR/shell/hyprland.conf.snippet"; } >> "$HYPR_CONF"
   echo "    已追加（备份: $HYPR_CONF.kairo.bak）"
   echo "    提示：重启 Hyprland 或执行 'hyprctl reload' 生效"
 else
-  echo "    跳过。可手动复制 shell/hyprland.conf.snippet 内容。"
+  echo "    跳过。可手动复制 shell/hyprland.conf.snippet 内容（将 __KAIRO_REPO__ 替换为 $REPO_DIR）"
 fi
 
 echo ""

@@ -5,7 +5,8 @@
 # 未运行：启动 quickshell 实例后再显示（首次唤起）
 set -euo pipefail
 
-CONFIG_PATH="${KAIRO_SHELL_DIR:-$HOME/Documents/kairo/shell}/config.qml"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_PATH="${KAIRO_SHELL_DIR:-$REPO_DIR/shell}/config.qml"
 
 # ---------------------------------------------------------------
 # EGL 修补：Hyprland exec 环境（GDM 会话）不继承 zshrc 里的
