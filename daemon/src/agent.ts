@@ -326,7 +326,8 @@ export class AgentBridge {
   /**
    * 自动命名：在 agent_end（rebind/重启恢复/切换/turn 结束）后调用。
    * 短首条消息直接当标题（零成本）；长消息尝试经当前默认模型精简为 ≤12 字标题，
-   * 失败回退为截断首条消息。命名后广播 session_active + session_list 同步 UI。
+   * 失败回退为截断首条消息。命名后广播 status（刷新标题栏名字，不清 UI 视图）
+   * + session_list 同步侧边栏。
    */
   private async maybeAutoName(session: AgentSession): Promise<void> {
     const id = session.sessionId;
@@ -346,7 +347,9 @@ export class AgentBridge {
       if (session.sessionManager?.getSessionName()) return; // 已被并发命名
       session.setSessionName(title);
       console.log(`[agent] 会话自动命名: ${title}`);
-      this.broadcast({ type: "session_active", id, name: title });
+      // 注意：不能广播 session_active——UI 收到它会把消息视图 resetMessages()，
+      // 刚完成的对话会被清空（看起来像全新对话）。改广播 status 刷新标题栏名字。
+      this.broadcast({ type: "status", status: this.status() });
       const list = await this.getSessionList();
       this.broadcast({ type: "session_list", sessions: list });
     } catch (err) {

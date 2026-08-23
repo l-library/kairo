@@ -33,6 +33,8 @@ Rectangle {
   property var streamAcc: null
   // 工具执行中的卡名册：toolCallId → card（指向 streamAcc.tools 内的对象）
   property var toolIndex: ({})
+  // 当前视图对应的会话 id（防御同会话的重复 session_active，如自动命名）
+  property string _shownSessionId: ""
   // 防抖标记
   property bool dirty: false
 
@@ -256,10 +258,16 @@ Rectangle {
         chat.pushSystemMessage(ev.mode === "chat" ? "已切换到 Chat 模式（纯对话）" : "已切换到 Command 模式（可读写文件/执行命令）")
         break
       case "session_active":
-        chat.resetMessages()
+        // 只有会话真的切换（id 变化）才清屏；同 id 的重复事件（如自动命名）不清，
+        // 否则刚完成的对话会突然消失
+        if (ev.id !== chat._shownSessionId) {
+          chat._shownSessionId = ev.id
+          chat.resetMessages()
+        }
         break
       case "session_history": {
         // 激活/切换后的历史回放（紧跟在 session_active 后）
+        chat._shownSessionId = chat.client ? chat.client.sessionId : ev.id
         chat.resetMessages()
         var msgs = ev.messages || []
         for (var k = 0; k < msgs.length; k++) {
