@@ -33,17 +33,28 @@ ensure_egl_env
 # ---------------------------------------------------------------
 ensure_ime_env() {
   # fcitx5 输入上下文插件的来源优先级：
-  #  1. nix 构建的 fcitx5-qt6（与 quickshell 同 channel Qt 6.11.1，ABI 完全匹配）
-  #     —— 路径随 nix 更新漂移，脚本动态解析，可用 KAIRO_QT_PLUGIN_DIR 覆盖
-  #  2. 系统 apt 的 fcitx5-qt6 插件（Qt 6.4 构建）与 nix Qt ABI 不兼容，不用。
-  # 注意：绝不能把系统库目录加进 LD_LIBRARY_PATH（系统 glibc 会污染 nix 二进制
-  # 导致 symbol lookup error）；nix 插件的依赖自带 RUNPATH，无需库路径 hack。
+  #  1. KAIRO_QT_PLUGIN_DIR 手动覆盖
+  #  2. 缓存文件 ~/.local/state/kairo/qt-plugin-dir（首次 nix eval 解析后写入，
+  #     避免每次 toggle 都跑 nix eval——那会让脚本慢 1.4s）
+  #  3. nix eval 解析 nixpkgs#qt6Packages.fcitx5-qt（与 quickshell 同 Qt 6.11.1，
+  #     ABI 匹配；nix 更新后缓存失效自动重解析）
+  # 插件依赖自带 RUNPATH，无需库路径 hack；注意不要把系统库目录加进
+  # LD_LIBRARY_PATH（系统 glibc 会污染 nix 二进制直接崩溃）。
   local plugin_dir="${KAIRO_QT_PLUGIN_DIR:-}"
+  local cache_file="$HOME/.local/state/kairo/qt-plugin-dir"
+  if [[ -z "$plugin_dir" && -f "$cache_file" ]]; then
+    local cached="$(cat "$cache_file" 2>/dev/null || true)"
+    if [[ -n "$cached" && -d "$cached/lib/qt-6/plugins" ]]; then
+      plugin_dir="$cached/lib/qt-6/plugins"
+    fi
+  fi
   if [[ -z "$plugin_dir" ]]; then
     local p=""
     p="$(nix eval --raw 'nixpkgs#qt6Packages.fcitx5-qt.outPath' 2>/dev/null || true)"
     if [[ -n "$p" && -d "$p/lib/qt-6/plugins" ]]; then
       plugin_dir="$p/lib/qt-6/plugins"
+      mkdir -p "$(dirname "$cache_file")" 2>/dev/null || true
+      echo "$p" > "$cache_file" 2>/dev/null || true
     fi
   fi
   if [[ -n "$plugin_dir" ]]; then
