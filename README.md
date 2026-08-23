@@ -95,9 +95,7 @@ M0 技术验证 ✅ · M1 daemon 骨架 ✅ · M2 浮窗+聊天 ✅ · M3 Comman
 Command 模式下的真实工作流：向 AI 提出视频处理需求，它给出多种方案（ffmpeg 转码 / mpv·vlc 播放），
 命令执行前弹出确认卡，批准后生成无音轨视频 `video_noaudio.mp4`。
 
-<video src="assets/display.mp4" controls preload="metadata" width="100%"></video>
-
-*若视频无法播放，可直接[下载 assets/display.mp4](assets/display.mp4) 查看。*
+[视频演示](assets/display.mp4) 
 
 ## 贡献
 
@@ -109,4 +107,4 @@ Command 模式下的真实工作流：向 AI 提出视频处理需求，它给�
 
 ## 许可证
 
-尚未附带开源许可证，代码默认保留所有权利。
+ [LICENSE](LICENSE)
