@@ -56,7 +56,7 @@ cd "$DAEMON_DIR"
 if [[ ! -d node_modules ]]; then npm ci; fi
 npm run build
 
-echo "==> [2/4] 安装 systemd 单元…"
+echo "==> [2/4] 安装 systemd 单元 + kairoctl CLI…"
 mkdir -p "$SYSTEMD_DIR"
 NODE_BIN="$(command -v node || echo /usr/bin/node)"
 sed -e "s|/home/liborui/Documents/kairo|$REPO_DIR|g" \
@@ -72,6 +72,18 @@ if ! systemctl --user is-active --quiet "$SERVICE_NAME"; then
   exit 1
 fi
 echo "    kairo-daemon 运行中 ✅"
+
+# kairoctl → PATH（默认 ~/.local/bin，可用 KAIRO_BIN_DIR 覆盖）
+BIN_DIR="${KAIRO_BIN_DIR:-$HOME/.local/bin}"
+mkdir -p "$BIN_DIR"
+ln -sf "$REPO_DIR/scripts/kairoctl" "$BIN_DIR/kairoctl"
+if [[ ":$PATH:" == *":$BIN_DIR:"* ]]; then
+  echo "    kairoctl → $BIN_DIR/kairoctl ✅"
+else
+  echo "!! 已安装到 $BIN_DIR/kairoctl，但该目录不在当前 PATH 中" >&2
+  echo "    请在 shell 配置中加入: export PATH=\"\$HOME/.local/bin:\$PATH\"" >&2
+  echo "    或设置 KAIRO_BIN_DIR 指向已有 PATH 目录后重跑 install.sh" >&2
+fi
 
 echo "==> [3/4] 导入 provider 密钥 + 同步内置技能…"
 if [[ "$SKIP_SETUP" -eq 1 ]]; then
@@ -102,4 +114,4 @@ fi
 echo ""
 echo "安装完成 ✅"
 echo "  - 唤起浮窗：Super+A"
-echo "  - 管理：     kairoctl status|restart|logs"
+echo "  - 管理：     kairoctl status|restart|logs（已安装到 ${BIN_DIR:-$HOME/.local/bin}/kairoctl）"
