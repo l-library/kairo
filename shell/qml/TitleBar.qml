@@ -3,7 +3,8 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 
 /**
- * TitleBar.qml — 会话名 + 模型选择 + 模式徽标 + 连接状态 + 主题切换 + 隐藏按钮
+ * TitleBar.qml — ☰(左) + 会话名 + 模型/思维选择 + 连接状态 + 主题切换 + 隐藏按钮
+ * 注：面板内容宽 625（layer 物理宽），元素按 625 布局；模式切换在底部 InputBar
  */
 Item {
   id: tb
@@ -37,9 +38,31 @@ Item {
     Row {
       id: leftRow
       anchors.left: parent.left
-      anchors.leftMargin: 12
+      anchors.leftMargin: 8
       anchors.verticalCenter: parent.verticalCenter
       spacing: 8
+
+      // 会话列表（呼出左侧侧边栏）——放在最左侧，符合侧边栏从左滑出的直觉
+      Rectangle {
+        id: listBtn
+        width: 24
+        height: 24
+        radius: 6
+        anchors.verticalCenter: parent.verticalCenter
+        color: listMA.containsMouse ? (tb.theme ? tb.theme.surface : "#313244") : "transparent"
+        Text {
+          anchors.centerIn: parent
+          text: "☰"
+          color: tb.theme ? tb.theme.subtext : "#a6adc8"
+          font.pixelSize: 13
+        }
+        MouseArea {
+          id: listMA
+          anchors.fill: parent
+          hoverEnabled: true
+          onClicked: tb.listToggleRequested()
+        }
+      }
 
       Rectangle {
         width: 8
@@ -55,7 +78,7 @@ Item {
         font.pixelSize: 13
         font.bold: true
         elide: Text.ElideMiddle
-        width: 150
+        width: 130
       }
 
       // 模型 chip：点击弹出模型选择器
@@ -116,51 +139,6 @@ Item {
       }
     }
 
-    // 模式徽标
-    Rectangle {
-      anchors.horizontalCenter: parent.horizontalCenter
-      anchors.verticalCenter: parent.verticalCenter
-      width: inner.implicitWidth + 18
-      height: 20
-      radius: 10
-      color: tb.mode === "command" ? tb.theme.surface : tb.theme.surfaceAlt
-      border.color: tb.mode === "command" ? tb.theme.accent : tb.theme.muted
-
-      Text {
-        id: inner
-        anchors.centerIn: parent
-        text: tb.mode === "command" ? "⚡ Command" : "💬 Chat"
-        color: tb.mode === "command" ? tb.theme.accent : tb.theme.subtext
-        font.pixelSize: 10
-        font.bold: true
-      }
-    }
-
-    // 会话列表（呼出侧边栏）
-    Rectangle {
-      id: listBtn
-      anchors.right: themeBtn.left
-      anchors.rightMargin: 4
-      anchors.verticalCenter: parent.verticalCenter
-      width: 22
-      height: 22
-      radius: 5
-      color: "transparent"
-      Text {
-        anchors.centerIn: parent
-        text: "☰"
-        color: tb.theme ? tb.theme.subtext : "#a6adc8"
-        font.pixelSize: 12
-      }
-      MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: tb.listToggleRequested()
-        onEntered: listBtn.color = tb.theme.surface
-        onExited: listBtn.color = "transparent"
-      }
-    }
-
     // 主题切换
     Rectangle {
       id: themeBtn
@@ -215,7 +193,8 @@ Item {
   // ---- 模型选择器 ----
   QC.Popup {
     id: modelPopup
-    x: modelChip.x
+    // x 钳制在面板内（chip 靠右时弹窗左移，避免溢出 500 宽面板）
+    x: Math.min(modelChip.x, tb.width - width - 4)
     y: modelChip.y + modelChip.height + 4
     width: 300
     padding: 10
