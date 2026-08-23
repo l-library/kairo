@@ -7,6 +7,20 @@ set -euo pipefail
 
 CONFIG_PATH="${KAIRO_SHELL_DIR:-$HOME/Documents/kairo/shell}/config.qml"
 
+# 修复：Hyprland exec 环境（GDM 会话）不继承 zshrc 里的 __EGL_VENDOR_LIBRARY_DIRS。
+# nix 版 mesa 需要它才能被 glvnd 发现（否则 QML 面板报 EGL not available、显示即崩溃）。
+# 策略与 ~/.zshrc 的 update-mesa-egl-path 一致：nix eval 解析当前 mesa → 兜底扫描 store。
+ensure_egl_env() {
+  if [[ -n "${__EGL_VENDOR_LIBRARY_DIRS:-}" ]]; then return 0; fi
+  # 选 store 中最新且确实包含 egl_vendor.d 的 mesa（目录名形如 <hash>-mesa-26.1.5）
+  local p=""
+  p="$(ls -td /nix/store/*-mesa-*/share/glvnd/egl_vendor.d 2>/dev/null | head -1 || true)"
+  if [[ -n "$p" ]]; then
+    export __EGL_VENDOR_LIBRARY_DIRS="$p"
+  fi
+}
+ensure_egl_env
+
 # exec-once 启动模式：只启动不显示（保持隐藏，等 Super+A）
 if [[ "${1:-}" == "--start-safe" ]]; then
   if quickshell ipc -p "$CONFIG_PATH" call kairo isVisible >/dev/null 2>&1; then

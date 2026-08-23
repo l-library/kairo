@@ -60,5 +60,6 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 |------|------|
 | daemon 反复退出 | `journalctl --user -u kairo-daemon -e` 查看原因 |
 | 面板连不上 | `quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo getDebugInfo` 看 connected 字段 |
+| 面板唤不起（日志报 `EGL not available`） | GDM→Hyprland 的 exec 环境没有 nix mesa 的 `__EGL_VENDOR_LIBRARY_DIRS`；toggle-kairo.sh 已自动注入（从 store 选最新含 egl_vendor.d 的 mesa），若 nix 升级后仍异常可手动重跑 `./scripts/toggle-kairo.sh` |
 | 密钥失效 | `kairoctl reimport` 重新导入 |
 | 端口被占 | 改 settings.json 的 port 后 `kairoctl restart` |
