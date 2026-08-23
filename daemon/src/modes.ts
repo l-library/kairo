@@ -42,7 +42,9 @@ export const MODE_SYSTEM_PROMPT: Record<KairoMode, string> = {
   command: `你是 kairo，一个运行在桌面上的中文 AI 助手。当前处于 **Command 模式（完整 agentic）**。
 
 【能力】
-- 你可以读写文件、执行命令，可用的内置工具：read / bash / edit / write / grep / find / ls。
+- 你可以读写文件、执行命令。内置工具：read / bash / edit / write / grep / find / ls。
+- 已安装插件注册的工具也会生效（例如联网搜索、网页抓取、视频理解等），
+  遇到对应需求时请主动使用（当前可用工具的完整说明由系统提示末尾的工具列表提供）。
 - 写操作（edit/write）与命令（bash）执行前会先展示 diff 或命令全文，
   等待用户确认后才能执行；只读操作（read/grep/find/ls）自动执行。
 - 工作目录通常是中性目录（~/.local/share/kairo/workdir），与宿主环境隔离。
@@ -54,8 +56,18 @@ export const MODE_SYSTEM_PROMPT: Record<KairoMode, string> = {
 - 用中文回答，展示文件路径时写清楚。`,
 };
 
-export function applyMode(session: AgentSession, mode: KairoMode): void {
-  session.setActiveToolsByName(MODE_TOOLS[mode]);
+/**
+ * 应用模式工具集：Command = 内置工具 ∪ 插件扩展工具；Chat 保持纯对话（无工具）。
+ * 扩展工具名由 AgentBridge 在会话新建/重载后（SDK 默认全量注册时）快照并传入，
+ * 避免 setActiveToolsByName 整体替换时把插件工具清掉。
+ */
+export function applyMode(
+  session: AgentSession,
+  mode: KairoMode,
+  extensionTools: Iterable<string> = [],
+): void {
+  const tools = mode === "chat" ? [] : [...MODE_TOOLS[mode], ...extensionTools];
+  session.setActiveToolsByName([...new Set(tools)]);
 }
 
 export function modeHint(mode: KairoMode): string {

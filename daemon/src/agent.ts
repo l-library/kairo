@@ -23,7 +23,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { KairoConfig } from "./config.js";
 import type { KairoMode } from "./modes.js";
-import { applyMode, modeHint, MODE_SYSTEM_PROMPT } from "./modes.js";
+import { applyMode, modeHint, MODE_SYSTEM_PROMPT, MODE_TOOLS } from "./modes.js";
 import type { ApprovalRegistry } from "./approval.js";
 import { createApprovalGateExtension } from "./approval.js";
 import type {
@@ -140,6 +140,24 @@ export class AgentBridge {
     this.mode = initialMode;
   }
 
+  /** 插件扩展注册的工具名（Command 模式下与内置工具合并激活） */
+  private extensionToolNames = new Set<string>();
+
+  /**
+   * 快照扩展工具名。必须在 applyMode 之前、会话为全新状态时调用：
+   * 新建/恢复/重载后的会话，SDK 默认 includeAllExtensionTools 全量注册，
+   * getActiveToolNames() 此时包含全部插件工具；过滤掉内置模式工具即得扩展工具。
+   */
+  private captureExtensionTools(session: AgentSession): void {
+    const modeTools = new Set([...MODE_TOOLS.chat, ...MODE_TOOLS.command]);
+    this.extensionToolNames = new Set(
+      session.getActiveToolNames().filter((n) => !modeTools.has(n)),
+    );
+    if (this.extensionToolNames.size > 0) {
+      console.log("[agent] 扩展工具已快照:", [...this.extensionToolNames].join(", "));
+    }
+  }
+
   /** 创建 runtime 工厂（资源加载器内联扩展 = 确认门 + 按模式系统提示 + 资源隔离） */
   private makeRuntimeFactory(): CreateAgentSessionRuntimeFactory {
     const config = this.config;
@@ -227,8 +245,10 @@ export class AgentBridge {
     this.unsubscribe?.();
     // ① 清空该会话的 pending 审批（会话已切换，审批已无意义）
     this.approvals.rejectAll("会话已切换");
-    // ② 按当前模式重设工具
-    applyMode(session, this.mode);
+    // ② 先快照扩展工具（会话新建/恢复时全量注册），再按当前模式重设工具，
+    //    避免整体替换时丢掉插件工具
+    this.captureExtensionTools(session);
+    applyMode(session, this.mode, this.extensionToolNames);
     // ③ 重订阅事件流
     this.unsubscribe = session.subscribe((event) => {
       const ws = normalizeEvent(event);
@@ -286,7 +306,7 @@ export class AgentBridge {
       await loader?.reload?.().catch(() => {
         console.error("[agent] 模式切换时资源加载器 reload 失败:");
       });
-      applyMode(session, mode);
+      applyMode(session, mode, this.extensionToolNames);
       // 模式提示语以自定义消息注入（display:false，不触发新 turn，不显示在 UI）
       await session
         .sendCustomMessage({
@@ -575,7 +595,7 @@ export class AgentBridge {
     const pm = this.resourceLoaderPackageManager();
     if (!pm || !rl) throw new Error("包管理器不可用");
     await pm.installAndPersist(source);
-    await (rl as { reload?: () => Promise<void> }).reload?.();
+    await this.reloadSessionForPlugins();
     this.broadcast({ type: "plugins_changed", plugins: this.listPlugins() });
     this.broadcast({ type: "skills_response", skills: this.listSkills() });
   }
@@ -586,9 +606,31 @@ export class AgentBridge {
     const pm = this.resourceLoaderPackageManager();
     if (!pm || !rl) throw new Error("包管理器不可用");
     await pm.removeAndPersist(source);
-    await (rl as { reload?: () => Promise<void> }).reload?.();
+    await this.reloadSessionForPlugins();
     this.broadcast({ type: "plugins_changed", plugins: this.listPlugins() });
     this.broadcast({ type: "skills_response", skills: this.listSkills() });
+  }
+
+  /**
+   * 插件安装/移除后重建会话运行时：只 reload 资源加载器不会重建 ExtensionRunner，
+   * 新插件工具要等 daemon 重启才注册。这里先中断流式，再 session.reload()
+   * 重建扩展与工具注册表，随后重新快照扩展工具并按当前模式恢复工具集。
+   */
+  private async reloadSessionForPlugins(): Promise<void> {
+    const rl = this.runtime?.services?.resourceLoader;
+    if (!rl) return;
+    await (rl as { reload?: () => Promise<void> }).reload?.();
+    const session = this.runtime?.session;
+    if (!session) return;
+    if (session.isStreaming) {
+      await session.abort().catch(() => {});
+    }
+    await session.reload().catch((err) => {
+      console.error("[plugins] 会话 reload 失败（插件可能需重启 daemon 后生效）:", err);
+    });
+    // reload 后活动工具 = 原活动 ∪ 全部扩展工具；重新快照并按当前模式恢复
+    this.captureExtensionTools(session);
+    applyMode(session, this.mode, this.extensionToolNames);
   }
 
   // =========================================================================
