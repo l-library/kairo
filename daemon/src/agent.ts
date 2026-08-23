@@ -20,7 +20,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { KairoConfig } from "./config.js";
 import type { KairoMode } from "./modes.js";
-import { applyMode, modeHint } from "./modes.js";
+import { applyMode, modeHint, MODE_SYSTEM_PROMPT } from "./modes.js";
 import type { ApprovalRegistry } from "./approval.js";
 import { createApprovalGateExtension } from "./approval.js";
 import type {
@@ -123,7 +123,7 @@ export class AgentBridge {
     this.mode = initialMode;
   }
 
-  /** 创建 runtime 工厂（资源加载器内联扩展 = 确认门） */
+  /** 创建 runtime 工厂（资源加载器内联扩展 = 确认门 + 按模式系统提示） */
   private makeRuntimeFactory(): CreateAgentSessionRuntimeFactory {
     const config = this.config;
     const approvals = this.approvals;
@@ -133,6 +133,13 @@ export class AgentBridge {
         agentDir,
         resourceLoaderOptions: {
           extensionFactories: [createApprovalGateExtension(approvals, config)],
+          // 按模式注入系统提示：闭包在 loader 创建 / reload 时求值，读当前 mode。
+          // Chat 整体替换 pi 基础提示（其内置首句宣称可读文件/执行命令，
+          // 即使无工具也会让模型误称能编辑文件）；Command 前置模式说明保留基础提示。
+          systemPromptOverride: (base: string | undefined) => {
+            if (this.mode === "chat") return MODE_SYSTEM_PROMPT.chat;
+            return [MODE_SYSTEM_PROMPT.command, base].filter((s) => s && s.trim()).join("\n\n");
+          },
         },
       });
       return {
@@ -232,6 +239,14 @@ export class AgentBridge {
     this.persistMode(mode);
     const session = this.runtime?.session;
     if (session) {
+      // 中途切模式：systemPromptOverride 只在 loader 创建 / reload 时求值，
+      // 必须先 reload 让缓存系统提示按新模式重建，再 applyMode 重组提示。
+      const loader = this.runtime?.services?.resourceLoader as
+        | { reload?: () => Promise<void> }
+        | undefined;
+      await loader?.reload?.().catch(() => {
+        console.error("[agent] 模式切换时资源加载器 reload 失败:");
+      });
       applyMode(session, mode);
       // 模式提示语以自定义消息注入（display:false，不触发新 turn，不显示在 UI）
       await session

@@ -196,7 +196,7 @@ Command 模式的工具以 `cwd` 为工作目录（读取 AGENTS.md、定位项�
 - **Chat**：`session.setActiveToolsByName([])` → 纯 LLM 对话，无任何工具事件。
 - **Command**：`session.setActiveToolsByName(["read","bash","edit","write","grep","find","ls"])`（SDK 内置工具仅此 7 个）+ 启用确认门。
 - 切换 = 调用 `setActiveToolsByName()`（比裸改 `agent.state.tools` 完整：会同步重建系统提示，Chat 模式下不残留工具描述）。
-- 模式提示语：无公开 systemPrompt setter，以**会话消息**方式注入（切换后发送一条消息：“你现在处于 Command 模式，可以读写文件、执行命令”），不改系统提示。
+- 模式提示语：**经 `ResourceLoader.systemPromptOverride` 注入按模式系统提示**（`MODE_SYSTEM_PROMPT`，见 §13）。Chat 模式整体替换 pi 内置基础提示（其首句宣称可读文件/执行命令，即使无工具也会让模型误称能编辑文件）；Command 模式前置 kairo 模式说明并保留构建的基础提示（工具列表、准则）。中途切模式先 `resourceLoader.reload()` 再 `setActiveToolsByName`，使缓存系统提示按新模式重建；另保留一条 `display:false` 会话消息提示作为上下文双重保险。
 - 每次会话替换（新建/切换）后需按当前模式重新调用 `setActiveToolsByName`（见 §6.5 `setRebindSession`）。
 - UI：输入框旁的 Chat/Command 切换按钮 + `/chat`、`/cmd` 输入命令；模式选择持久化到 `settings.json`。
 
@@ -390,6 +390,7 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 | 会话列表 UI（M4 后重构） | 顶部横向 chips | **点击标题栏 ☰ 呼出的左侧边栏**（SessionSidebar，滑入/出动画，纵向列表：命名+首条摘要+消息数，活动高亮，两步确认删除），SessionBar.qml 删除 | ①会话增多后顶部 chips 不可读；②删除按钮被行 MouseArea 遮挡从未生效（M4 遗留，重构中一并修复）；③避免 anchors 覆盖滑出动画 x。**跟进修复**：两处 `armed` 不同源——按钮宽/色/字绑定解析到 delegate 根属性，而 MouseArea 写的是 `parent.armed`（按钮自身动态属性），第一击确认态不可见、如同无反应；统一为 `row.armed` 单一来源，且按钮色改纯绑定（`onEntered` 赋值会破坏绑定） |
 | 会话命名（M4 后新增） | 手动重命名（未实现） | **AI/启发式自动命名**：`agent_end` 后对未命名会话取首条用户消息，≤24 字直接作标题，否则经 `ModelRuntime.completeSimple`（完整 Context 对象 + `tools:[]`，缺一即触发 SDK `tools.map` 崩溃）生成 ≤12 字中文标题，`setSessionName` 落盘并广播 session_list | 用户要求“AI 自动命名”；短消息直接作标题避免无谓模型调用；模型取 settingsManager 的 defaultProvider/defaultModel（分字段存储，兼容 provider/model 组合格式） |
 | 配色优化（M4 后） | 输入框默认白底、Markdown 代码硬编码暗色 | **InputBar TextArea `background:null`**（Quick Controls 自带系统浅色背景，暗色模式下盖住深色底、浅色文字不可辨认）并显式设置 selection/selected 色；**Markdown.js 行内代码/代码块/链接/表格分隔线全部走 palette**（亮色下行内代码由黑底黑字改为 `codeBg+#1f2328` 浅底深字） | 用户报告：暗色模式输入字与白底难分辨、亮色模式 `xxx` 黑底黑字 |
+| 模式系统提示（M4 后新增） | 无公开 systemPrompt setter，会话消息提示（PLAN §6.3） | **`resourceLoader.systemPromptOverride` 按模式注入**：`MODE_SYSTEM_PROMPT`（chat=纯对话整体替换 pi 基础提示——其内置“expert coding assistant”首句即使无工具也让模型误称可编辑文件；command=前置模式说明+保留基础提示）。中途切模式先 `reload()` 再 `setActiveToolsByName`；保留 display:false 模式提示消息双重保险 | 用户报告：Chat 模式下模型自称能编辑文件。端到端验证：Chat 问“能否读写文件”→答“不能”；Command→“能”；期间 read 工具正常执行、审批门不发多余确认 |
 | 会话历史回放（M4 修复） | 切换/新建后回放（`session_history`） | **连接快照也补发 `session_active` + `session_history`**（panel-socket/ws 连接时、`get_status` 响应时），并新增 `session_list` 注入当前活动会话（`listWithActive`），`SessionListItem` 透传 `firstMessage`；**SessionBar 改用固定算术定位**（x=8+56+6，宽=父宽-78），弃用 `RowLayout` + `width: parent.width - newBtn.width - 16` | ①面板重连时 `session_history` 已在 rebindSession（启动/新建/切换）时广播完毕，导致打开面板永远是空白消息区；②SDK `newSession` 推迟落盘（首条助手消息前不写文件），新建会话在磁盘列表中缺失、UI 无活动高亮，且 chip 只显示 8 位 UUID 不可读；③**根因：ListView 宽度绑定在 RowLayout 布局期求值为 0（缺测 `listGeo` 实为 [477,4,0,24]），宽度 0 → 无可见 delegate → 会话栏从未真正渲染过（M4 起一直存在）**。修复后实测：激活 110 条会话→消息区回放 54 条可渲染消息，活动 chip 蓝色高亮 |
 
 ## 14. 里程碑状态
