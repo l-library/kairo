@@ -25,9 +25,37 @@ ensure_egl_env() {
 ensure_egl_env
 
 # ---------------------------------------------------------------
+# IME 修补：fcitx5 是系统 apt 包，其 Qt6 前端插件在
+#   /usr/lib/x86_64-linux-gnu/qt6/plugins/platforminputcontexts/
+# nix Qt 默认不扫描该路径；插件还依赖 libFcitx5Qt6DBusAddons.so.1
+# （系统库目录）。注入后面板内可正常弹出 fcitx 输入法打中文。
+# 均追加到末尾，不抢 nix 库/插件优先级。
+# ---------------------------------------------------------------
+ensure_ime_env() {
+  # fcitx5 输入上下文插件的来源优先级：
+  #  1. nix 构建的 fcitx5-qt6（与 quickshell 同 channel Qt 6.11.1，ABI 完全匹配）
+  #     —— 路径随 nix 更新漂移，脚本动态解析，可用 KAIRO_QT_PLUGIN_DIR 覆盖
+  #  2. 系统 apt 的 fcitx5-qt6 插件（Qt 6.4 构建）与 nix Qt ABI 不兼容，不用。
+  # 注意：绝不能把系统库目录加进 LD_LIBRARY_PATH（系统 glibc 会污染 nix 二进制
+  # 导致 symbol lookup error）；nix 插件的依赖自带 RUNPATH，无需库路径 hack。
+  local plugin_dir="${KAIRO_QT_PLUGIN_DIR:-}"
+  if [[ -z "$plugin_dir" ]]; then
+    local p=""
+    p="$(nix eval --raw 'nixpkgs#qt6Packages.fcitx5-qt.outPath' 2>/dev/null || true)"
+    if [[ -n "$p" && -d "$p/lib/qt-6/plugins" ]]; then
+      plugin_dir="$p/lib/qt-6/plugins"
+    fi
+  fi
+  if [[ -n "$plugin_dir" ]]; then
+    export QT_PLUGIN_PATH="$plugin_dir"
+  fi
+}
+ensure_ime_env
+
+# ---------------------------------------------------------------
 # 直接使用真正的 quickshell 二进制：用户 ~/.local/bin/quickshell 是
-# nix eval 包装器（每次调用约 0.9s 的 nix eval 开销，Hyprland keybind
-# 路径因此从 60ms 变 1.9s）。上面的 EGL 注入已覆盖其功能。
+# nix eval 包装器（每次调用约 0.9s 的 nix eval 开销，keybind 路径因此
+# 从 60ms 变 1.9s）。上面的 EGL/IME 注入已覆盖其功能。
 # ---------------------------------------------------------------
 if [[ -n "${KAIRO_QS_BIN:-}" ]]; then
   QS_BIN="$KAIRO_QS_BIN"
@@ -41,12 +69,18 @@ ipc_call() {
   "$QS_BIN" ipc -p "$CONFIG_PATH" call "$@" >/dev/null 2>&1
 }
 
+start_panel() {
+  # setsid + nohup：脱离调用方进程组（Hyprland exec / 终端环境退出时不误杀）
+  setsid nohup "$QS_BIN" -p "$CONFIG_PATH" >/dev/null 2>&1 < /dev/null &
+  disown 2>/dev/null || true
+}
+
 # exec-once 启动模式：只启动不显示（保持隐藏，等 Super+A）
 if [[ "${1:-}" == "--start-safe" ]]; then
   if ipc_call kairo isVisible; then
     exit 0
   fi
-  "$QS_BIN" -p "$CONFIG_PATH" >/dev/null 2>&1 &
+  start_panel
   exit 0
 fi
 
@@ -57,8 +91,7 @@ if ipc_call kairo isVisible; then
 fi
 
 # 实例未启动：拉起（保持隐藏），等待 IPC 就绪后显示
-"$QS_BIN" -p "$CONFIG_PATH" >/dev/null 2>&1 &
-QS_PID=$!
+start_panel
 
 for _ in $(seq 1 40); do
   if ipc_call kairo isVisible; then
@@ -68,6 +101,7 @@ for _ in $(seq 1 40); do
   sleep 0.1
 done
 
-# IPC 未就绪（启动失败或过慢）：至少保证进程存在
-kill -0 "$QS_PID" 2>/dev/null || echo "kairo 浮窗启动失败（检查 quickshell 是否可用）" >&2
-wait "$QS_PID" 2>/dev/null || true
+# IPC 未就绪（启动失败或过慢）：提示
+if ! pgrep -f "$QS_BIN" >/dev/null 2>&1; then
+  echo "kairo 浮窗启动失败（检查 quickshell 是否可用）" >&2
+fi
