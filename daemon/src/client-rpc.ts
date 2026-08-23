@@ -14,13 +14,15 @@ export interface ClientRpcDeps {
   agent: AgentBridge;
   sessions: KairoSessionManager;
   broadcast: BroadcastFn;
+  /** 主题持久化（settings.json 的 theme 字段） */
+  themeStore: { get: () => string; set: (theme: string) => void };
 }
 
 export async function handleClientEvent(
   msg: WsClientEvent,
   deps: ClientRpcDeps,
 ): Promise<void> {
-  const { approvals, agent, sessions, broadcast } = deps;
+  const { approvals, agent, sessions, broadcast, themeStore } = deps;
   switch (msg.type) {
     case "approve":
     case "reject":
@@ -74,6 +76,16 @@ export async function handleClientEvent(
       broadcast({ type: "session_list", sessions: await sessions.list() });
       break;
     }
+    case "theme_set": {
+      if (msg.theme === "dark" || msg.theme === "light") {
+        themeStore.set(msg.theme);
+        broadcast({ type: "theme_changed", theme: msg.theme });
+      }
+      break;
+    }
+    case "theme_get":
+      broadcast({ type: "theme_changed", theme: themeStore.get() });
+      break;
     case "get_status":
       broadcast({ type: "status", status: agent.status() });
       broadcast({ type: "session_list", sessions: await sessions.list() });

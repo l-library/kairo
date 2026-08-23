@@ -18,10 +18,11 @@ export interface WsServerDeps {
   approvals: ApprovalRegistry;
   agent: AgentBridge;
   sessions: KairoSessionManager;
+  themeStore: { get: () => string; set: (theme: string) => void };
 }
 
 export function startWsServer(deps: WsServerDeps): WebSocketServer {
-  const { httpServer, token, approvals, agent, sessions } = deps;
+  const { httpServer, token, approvals, agent, sessions, themeStore } = deps;
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", (req, socket, head) => {
@@ -54,7 +55,7 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
       } catch {
         return;
       }
-      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: (ev) => sendTo(ws, ev) }).catch(
+      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: (ev) => sendTo(ws, ev), themeStore }).catch(
         (err) => console.error("[ws] 客户端事件处理失败:", err),
       );
     });

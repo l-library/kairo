@@ -9,6 +9,7 @@
 | `port` | 44811 | HTTP/WS 端口（仅 127.0.0.1） |
 | `host` | 127.0.0.1 | 监听地址 |
 | `defaultMode` | command | 启动时的模式（切换后自动持久化） |
+| `theme` | dark | 面板主题 `dark`\|`light`（标题栏 🌙/☀️ 按钮或 IPC 切换后自动持久化） |
 | `workdir` | `~/.local/share/kairo/workdir` | Command 模式工具工作目录 |
 | `readOnlyAutoApprove` | read/grep/find/ls | 只读自动放行名单 |
 | `approvalTimeoutMs` | 600000 (10min) | 审批超时自动拒绝 |
@@ -53,6 +54,17 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 ```
 
 更换唤起键直接改 `bind` 行即可。
+
+**位置与动画**：面板为左边缘垂直居中的 layer 窗口；滑入/滑出动画由 QML 实现
+（Hyprland 的窗口动画只作用于普通窗口，对 layer 窗口无效；若改用 FloatingWindow
+可启用 snippet 内的 `animation slide` 规则）。
+
+**主题外部切换**（可选绑定）：
+
+```bash
+quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo setTheme light
+quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo getTheme
+```
 
 ## 故障排查
 

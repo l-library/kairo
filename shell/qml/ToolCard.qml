@@ -11,6 +11,7 @@ Item {
   implicitWidth: parent?.width ?? 0
 
   required property var card
+  property var theme: null
 
   readonly property string toolName: {
     if (!card) return ""
@@ -26,10 +27,11 @@ Item {
   readonly property bool isError: card.status === "error"
   readonly property bool isRejected: card.status === "rejected"
   readonly property color stateColor: {
-    if (isError) return "#f38ba8"
-    if (isRejected) return "#f9e2af"
-    if (card.status === "done") return "#a6e3a1"
-    return "#89b4fa"
+    if (!theme) return "#89b4fa"
+    if (isError) return theme.red
+    if (isRejected) return theme.yellow
+    if (card.status === "done") return theme.green
+    return theme.accent
   }
 
   readonly property string stateIcon: {
@@ -44,7 +46,7 @@ Item {
     width: parent.width
     height: body.implicitHeight + 10
     radius: 6
-    color: "#242437"
+    color: theme ? theme.surfaceAlt : "#242437"
     border.color: stateColor
     border.width: 1
 
@@ -78,7 +80,7 @@ Item {
         visible: (card.output || "") !== ""
         width: parent.width
         text: card.output || ""
-        color: "#a6adc8"
+        color: theme ? theme.subtext : "#a6adc8"
         font.family: "monospace"
         font.pixelSize: 11
         wrapMode: Text.WrapAnywhere

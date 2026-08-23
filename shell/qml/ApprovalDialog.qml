@@ -4,7 +4,7 @@ import QtQuick.Layouts
 /**
  * ApprovalDialog.qml — 确认弹窗（写文件 diff / 命令确认）
  *
- * 数据：client.pendingApproval = { id, toolName, target, diff, command, cwd }
+ * 数据：approval = { id, toolName, target, diff, command, cwd }
  */
 Item {
   id: dialog
@@ -13,11 +13,14 @@ Item {
   z: 100
 
   required property var approval
+  property var theme: null
   property bool allowKeyboard: true
+
+  signal responded(bool allowed)
 
   Rectangle {
     anchors.fill: parent
-    color: "#80000000"
+    color: dialog.theme ? dialog.theme.overlay : "#80000000"
     z: 1
   }
 
@@ -27,8 +30,8 @@ Item {
     width: Math.min(parent.width - 60, 420)
     height: Math.min(parent.height - 80, content.implicitHeight + 36)
     radius: 10
-    color: "#1e1e2e"
-    border.color: "#45475a"
+    color: dialog.theme ? dialog.theme.bg : "#1e1e2e"
+    border.color: dialog.theme ? dialog.theme.border : "#45475a"
     border.width: 1
     z: 2
 
@@ -44,13 +47,13 @@ Item {
         spacing: 8
         Text {
           text: "⚠"
-          color: "#f9e2af"
+          color: dialog.theme ? dialog.theme.yellow : "#f9e2af"
           font.pixelSize: 16
         }
         Text {
           width: parent.width - 30
           text: "确认操作"
-          color: "#cdd6f4"
+          color: dialog.theme ? dialog.theme.text : "#cdd6f4"
           font.pixelSize: 15
           font.bold: true
         }
@@ -61,7 +64,7 @@ Item {
         visible: dialog.approval && (dialog.approval.command || "")
         width: parent.width
         radius: 6
-        color: "#242437"
+        color: dialog.theme ? dialog.theme.surfaceAlt : "#242437"
         implicitHeight: col.implicitHeight + 12
         Column {
           id: col
@@ -72,14 +75,14 @@ Item {
           Text {
             visible: dialog.approval && !!dialog.approval.cwd
             text: "cwd: " + ((dialog.approval && dialog.approval.cwd) || "")
-            color: "#6c7086"
+            color: dialog.theme ? dialog.theme.muted : "#6c7086"
             font.pixelSize: 11
             font.family: "monospace"
           }
           Text {
             text: "$ " + ((dialog.approval && dialog.approval.command) || "")
             width: parent.width
-            color: "#f9e2af"
+            color: dialog.theme ? dialog.theme.yellow : "#f9e2af"
             font.pixelSize: 13
             font.family: "monospace"
             wrapMode: Text.WrapAnywhere
@@ -97,9 +100,10 @@ Item {
           id: dcol
           width: parent.width
           spacing: 6
+
           Text {
             text: "文件: " + ((dialog.approval && dialog.approval.target) || "")
-            color: "#a6adc8"
+            color: dialog.theme ? dialog.theme.subtext : "#a6adc8"
             font.pixelSize: 11
             font.family: "monospace"
             elide: Text.ElideMiddle
@@ -108,7 +112,7 @@ Item {
           Rectangle {
             width: parent.width
             radius: 6
-            color: "#171720"
+            color: dialog.theme ? dialog.theme.codeBg : "#171720"
             implicitHeight: Math.min(diffText.implicitHeight, 300)
             clip: true
             Text {
@@ -116,7 +120,7 @@ Item {
               x: 8
               y: 6
               width: parent.width - 16
-              text: colorizeDiff((dialog.approval && dialog.approval.diff) || "")
+              text: dialog.colorizeDiff((dialog.approval && dialog.approval.diff) || "")
               textFormat: Text.RichText
               font.pixelSize: 11
               font.family: "monospace"
@@ -134,11 +138,11 @@ Item {
           width: 110
           height: 32
           radius: 6
-          color: "#a6e3a1"
+          color: dialog.theme ? dialog.theme.green : "#a6e3a1"
           Text {
             anchors.centerIn: parent
             text: "批准 (Enter)"
-            color: "#1e1e2e"
+            color: dialog.theme ? dialog.theme.onAccent : "#1e1e2e"
             font.pixelSize: 12
             font.bold: true
           }
@@ -151,11 +155,11 @@ Item {
           width: 110
           height: 32
           radius: 6
-          color: "#f38ba8"
+          color: dialog.theme ? dialog.theme.red : "#f38ba8"
           Text {
             anchors.centerIn: parent
             text: "拒绝 (Esc)"
-            color: "#1e1e2e"
+            color: dialog.theme ? dialog.theme.onAccent : "#1e1e2e"
             font.pixelSize: 12
             font.bold: true
           }
@@ -171,23 +175,26 @@ Item {
         width: parent.width
         visible: dialog.approval && dialog.approval.toolName === "bash"
         text: "命令将在宿主环境执行，请确认命令内容安全"
-        color: "#6c7086"
+        color: dialog.theme ? dialog.theme.muted : "#6c7086"
         font.pixelSize: 10
         horizontalAlignment: Text.AlignHCenter
       }
     }
   }
 
-  // diff 双色渲染（增绿删红）
+  // diff 双色渲染（增绿删红；浅色模式加深对比）
   function colorizeDiff(diff) {
     if (!diff) return ""
+    var addColor = dialog.theme && !dialog.theme.isDark ? "#1a7f37" : "#a6e3a1"
+    var delColor = dialog.theme && !dialog.theme.isDark ? "#cf222e" : "#f38ba8"
+    var ctxColor = dialog.theme ? dialog.theme.subtext : "#a6adc8"
     var out = ""
     var lines = String(diff).split("\n")
     for (var i = 0; i < lines.length; i++) {
       var l = lines[i]
-      if (l.startsWith("+")) out += '<span style="color:#a6e3a1;">' + escapeTags(l) + "</span>\n"
-      else if (l.startsWith("-")) out += '<span style="color:#f38ba8;">' + escapeTags(l) + "</span>\n"
-      else out += '<span style="color:#a6adc8;">' + escapeTags(l) + "</span>\n"
+      if (l.startsWith("+")) out += '<span style="color:' + addColor + ';">' + dialog.escapeTags(l) + "</span>\n"
+      else if (l.startsWith("-")) out += '<span style="color:' + delColor + ';">' + dialog.escapeTags(l) + "</span>\n"
+      else out += '<span style="color:' + ctxColor + ';">' + dialog.escapeTags(l) + "</span>\n"
     }
     return out
   }
@@ -195,8 +202,6 @@ Item {
   function escapeTags(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   }
-
-  signal responded(bool allowed)
 
   function finish(allowed) {
     dialog.responded(allowed)

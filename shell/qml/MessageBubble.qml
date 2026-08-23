@@ -13,23 +13,18 @@ Item {
   implicitWidth: parent?.width ?? 0
 
   required property var row
-
-  readonly property color userBg: "#313244"
-  readonly property color assistantBg: "transparent"
-  readonly property color userText: "#cdd6f4"
+  property var theme: null
 
   Column {
     id: column
     width: parent.width
     spacing: 4
 
-    // 角色标签（非必要省略，靠气泡对齐区分）
-    // ---- 正文 ----
     Rectangle {
       readonly property bool isUser: row.role === "user"
       width: parent.width
       radius: 8
-      color: isUser ? "#313244" : "transparent"
+      color: isUser ? (bubble.theme ? bubble.theme.surface : "#313244") : "transparent"
       implicitHeight: contentColumn.implicitHeight + 12
 
       Column {
@@ -44,6 +39,7 @@ Item {
           visible: (row.thinking || "") !== ""
           text: row.thinking || ""
           open: row.thinkingOpen
+          theme: bubble.theme
           onToggle: {
             var obj = bubble.row
             obj.thinkingOpen = !obj.thinkingOpen
@@ -57,6 +53,7 @@ Item {
           delegate: ToolCard {
             required property var modelData
             width: parent.width
+            theme: bubble.theme
             card: modelData
           }
         }
@@ -67,10 +64,14 @@ Item {
           width: parent.width
           textFormat: Text.RichText
           wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-          color: userText
+          color: bubble.theme ? bubble.theme.text : "#cdd6f4"
           font.pixelSize: 13
           text: {
-            var palette = { codeBg: "#171720", accent: "#89b4fa", muted: "#a6adc8" }
+            var palette = {
+              codeBg: bubble.theme ? bubble.theme.codeBg : "#171720",
+              accent: bubble.theme ? bubble.theme.accent : "#89b4fa",
+              muted: bubble.theme ? bubble.theme.muted : "#a6adc8",
+            }
             return Md.mdToHtml(row.text || "", palette)
           }
           onLinkActivated: function (link) {

@@ -15,12 +15,14 @@ import "Markdown.js" as Md
  */
 Rectangle {
   id: chat
-  color: "#1e1e2e"
+  color: theme.bg
   width: parent?.width ?? 0
   height: parent?.height ?? 0
 
   property var client: null // KairoClient 注入
+  property var theme: null // Theme 实例注入
   signal hideRequested()
+  signal themeToggleRequested()
 
   // ---- 消息模型 ----
   ListModel {
@@ -40,16 +42,19 @@ Rectangle {
     TitleBar {
       id: titleBar
       width: parent.width
+      theme: chat.theme
       sessionName: chat.client ? chat.client.sessionName : ""
       mode: chat.client ? chat.client.mode : "command"
       connected: chat.client ? chat.client.connected : false
       streaming: chat.client ? chat.client.streaming : false
       onHideRequested: chat.hideRequested()
+      onThemeToggleRequested: chat.themeToggleRequested()
     }
 
     SessionBar {
       id: sessionBar
       width: parent.width
+      theme: chat.theme
       sessions: chat.client ? chat.client.sessions : []
       activeSessionId: chat.client ? chat.client.sessionId : ""
       onNewSessionRequested: chat.client.newSession()
@@ -76,6 +81,7 @@ Rectangle {
 
         delegate: MessageBubble {
           width: messageList.width
+          theme: chat.theme
           row: model
           required property var model
         }
@@ -90,7 +96,7 @@ Rectangle {
         text: chat.client && chat.client.mode === "chat"
           ? "Chat 模式 · 纯对话\n输入 `/cmd` 切换 Command 模式"
           : "Command 模式 · 可读写文件/执行命令\n输入 `/chat` 切换 Chat 模式"
-        color: "#45475a"
+        color: chat.theme ? chat.theme.emptyHint : "#45475a"
         font.pixelSize: 12
         horizontalAlignment: Text.AlignHCenter
       }
@@ -99,6 +105,7 @@ Rectangle {
     InputBar {
       id: inputBar
       width: parent.width
+      theme: chat.theme
       mode: chat.client ? chat.client.mode : "command"
       streaming: chat.client ? chat.client.streaming : false
       onSendRequested: function (text) {
@@ -116,6 +123,7 @@ Rectangle {
   ApprovalDialog {
     id: approval
     anchors.fill: parent
+    theme: chat.theme
     approval: chat.client ? chat.client.pendingApproval : null
     allowKeyboard: true
     onResponded: function (allowed) {

@@ -10,6 +10,7 @@ Item {
 
   property string text: ""
   property bool open: false
+  property var theme: null
   signal toggle()
 
   Row {
@@ -19,13 +20,13 @@ Item {
 
     Text {
       text: block.open ? "▾" : "▸"
-      color: "#a6adc8"
+      color: block.theme ? block.theme.subtext : "#a6adc8"
       font.pixelSize: 11
     }
 
     Text {
       text: "思考过程"
-      color: "#a6adc8"
+      color: block.theme ? block.theme.subtext : "#a6adc8"
       font.pixelSize: 11
       font.bold: true
       MouseArea {
@@ -38,7 +39,7 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: parent.width - 96
       height: 1
-      color: "#2a2b3a"
+      color: block.theme ? block.theme.divider : "#2a2b3a"
     }
   }
 
@@ -48,7 +49,7 @@ Item {
     anchors.topMargin: 4
     width: parent.width
     text: block.text
-    color: "#6c7086"
+    color: block.theme ? block.theme.muted : "#6c7086"
     font.pixelSize: 11
     font.italic: true
     wrapMode: Text.WrapAtWordBoundaryOrAnywhere

@@ -13,6 +13,8 @@ export type WsClientEvent =
   | { type: "sessions_new"; name?: string }
   | { type: "sessions_activate"; id: string }
   | { type: "sessions_delete"; id: string }
+  | { type: "theme_set"; theme: "dark" | "light" }
+  | { type: "theme_get" }
   | { type: "get_status" };
 
 /** 服务端 → 客户端 */
@@ -30,6 +32,7 @@ export type WsServerEvent =
   | { type: "approval_requested"; id: string; toolName: "edit" | "write" | "bash"; target?: string; diff?: string; command?: string; cwd?: string }
   | { type: "approval_resolved"; id: string; allowed: boolean }
   | { type: "mode_changed"; mode: string }
+  | { type: "theme_changed"; theme: string }
   | { type: "session_active"; id: string; name?: string }
   | { type: "session_list"; sessions: SessionListItem[] }
   | { type: "status"; status: SessionStatus }

@@ -14,6 +14,7 @@ Item {
 
   // ---- 公共状态 ----
   property string mode: "command"
+  property string theme: "dark"
   property string sessionId: ""
   property string sessionName: ""
   property bool connected: false
@@ -27,6 +28,7 @@ Item {
   signal sessionEvent(var ev) // message_*/tool_*/agent_*/turn_*
   signal approvalsChanged(var approval) // 新审批请求
   signal approvalResolved(var id, bool allowed)
+  signal themePaletteChanged(string palette)
 
   function connectToDaemon() {
     var home = ""
@@ -75,6 +77,11 @@ Item {
     send({ type: "cancel" })
   }
 
+  function setTheme(p) {
+    if (p !== "dark" && p !== "light") return
+    send({ type: "theme_set", theme: p })
+  }
+
   // ---- 协议处理 ----
   QtObject {
     id: protocol
@@ -95,6 +102,15 @@ Item {
           client.streaming = ev.status.streaming
           client.agentsRunning = ev.status.streaming
           client.connectionChanged(true)
+          break
+        case "theme_changed":
+          if (ev.theme !== client.theme) {
+            client.theme = ev.theme
+            client.themePaletteChanged(ev.theme)
+          } else {
+            // 连接后被动的同值事件也要触发一次，确保面板初始应用
+            client.themePaletteChanged(ev.theme)
+          }
           break
         case "mode_changed":
           client.mode = ev.mode
@@ -168,6 +184,7 @@ Item {
         client.reconnectAttempts = 0
         // 连接成功：请求当前状态
         client.send({ type: "get_status" })
+        client.send({ type: "theme_get" })
       } else {
         client.connected = false
       }

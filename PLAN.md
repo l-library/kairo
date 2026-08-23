@@ -382,6 +382,9 @@ bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 | 唤起机制 | DBus toggle | **quickshell 原生 IPC**（`IpcHandler` target=kairo + `quickshell ipc call`） | 优于 DBus，见问题 #2 |
 | 面板通道 | WebSocket | **Unix domain socket**（`~/.local/state/kairo/panel.sock`，0600 权限鉴权，换行 JSON） | quickshell 的 `Socket` 是 QLocalSocket（仅本地域套接字），无 TCP/WS 能力；HTTP/WS 仍保留给脚本与测试客户端 |
 | 面板控制 API | 纯 HTTP | 面板侧复用事件通道（prompt/mode/sessions_new/activate/delete/get_status 经 `handleClientEvent` 统一处理） | 与 socket 通道一致，WS 客户端同样可用 |
+| 浮窗位置 | 右上角（M2 实现） | **左边缘垂直居中**（anchors.left + margins 12） | layer-shell 未锚定维度自动居中；用户要求 |
+| 浮窗动画 | 无 | **QML 滑入/滑出**（显示 OutCubic 280ms + 淡入，隐藏 160ms；translate 在屏幕外起止） | Hyprland 窗口动画（windowsIn/windowrule）不作用于 layer 窗口；snippet 保留了改用普通窗口时的 `animation slide` 规则 |
+| 主题 | 固定深色 | **深/浅双主题**（`Theme.qml` 双色板；标题栏 🌙/☀️ 按钮 + IPC setTheme/getTheme；daemon 持久化到 settings.json `theme` 字段，重启自动恢复） | 用户要求；浅色板为 GitHub 风格（accent #0969da） |
 | daemon 运行 | `/usr/bin/node` | **Node ≥ 24**（pi SDK 要求；`command -v node`） | 宿主 /usr/bin/node 为 v20，undici 报错 |
 | 默认 cwd | `$HOME`（§11） | `~/.local/share/kairo/workdir` 中性目录 | 与 §5.3 隔离策略一致，§11 表格同步更正 |
 

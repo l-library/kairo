@@ -23,6 +23,7 @@ export interface PanelSocketDeps {
   approvals: ApprovalRegistry;
   agent: AgentBridge;
   sessions: KairoSessionManager;
+  themeStore: { get: () => string; set: (theme: string) => void };
 }
 
 export interface PanelSocketHandle {
@@ -47,7 +48,7 @@ class LineSplitter {
 }
 
 export function startPanelSocket(deps: PanelSocketDeps): PanelSocketHandle {
-  const { stateDir, approvals, agent, sessions } = deps;
+  const { stateDir, approvals, agent, sessions, themeStore } = deps;
   const sockPath = join(stateDir, "panel.sock");
   if (existsSync(sockPath)) unlinkSync(sockPath);
 
@@ -69,7 +70,7 @@ export function startPanelSocket(deps: PanelSocketDeps): PanelSocketHandle {
       } catch {
         return;
       }
-      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: send }).catch((err) => {
+      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: send, themeStore }).catch((err) => {
         console.error("[panel-socket] 客户端事件处理失败:", err);
       });
     });

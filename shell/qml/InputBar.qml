@@ -9,6 +9,7 @@ Item {
   id: inputBar
   width: parent?.width ?? 0
 
+  property var theme: null
   property string mode: "command"
   property bool streaming: false
   signal sendRequested(string text)
@@ -27,7 +28,7 @@ Item {
       height: 24
       spacing: 8
 
-      // Chat / Command 切换（Item 包装以在 RowLayout 内垂直居中）
+      // Chat / Command 切换
       Item {
         width: 44
         height: 20
@@ -37,12 +38,12 @@ Item {
           anchors.fill: parent
           readonly property bool selected: inputBar.mode === "chat"
           radius: 4
-          color: chatSegWrap.selected ? "#313244" : "transparent"
-          border.color: chatSegWrap.selected ? "#a6adc8" : "#3b4261"
+          color: chatSegWrap.selected ? inputBar.theme.surface : "transparent"
+          border.color: chatSegWrap.selected ? inputBar.theme.subtext : inputBar.theme.border
           Text {
             anchors.centerIn: parent
             text: "Chat"
-            color: chatSegWrap.selected ? "#a6adc8" : "#6c7086"
+            color: chatSegWrap.selected ? inputBar.theme.subtext : inputBar.theme.muted
             font.pixelSize: 10
           }
           MouseArea {
@@ -61,12 +62,12 @@ Item {
           anchors.fill: parent
           readonly property bool selected: inputBar.mode === "command"
           radius: 4
-          color: cmdSegWrap.selected ? "#313244" : "transparent"
-          border.color: cmdSegWrap.selected ? "#89b4fa" : "#3b4261"
+          color: cmdSegWrap.selected ? inputBar.theme.surface : "transparent"
+          border.color: cmdSegWrap.selected ? inputBar.theme.accent : inputBar.theme.border
           Text {
             anchors.centerIn: parent
             text: "Command"
-            color: cmdSegWrap.selected ? "#89b4fa" : "#6c7086"
+            color: cmdSegWrap.selected ? inputBar.theme.accent : inputBar.theme.muted
             font.pixelSize: 10
           }
           MouseArea {
@@ -78,7 +79,7 @@ Item {
 
       Text {
         text: "Enter 发送 · Shift+Enter 换行"
-        color: "#585b70"
+        color: inputBar.theme ? inputBar.theme.faint : "#585b70"
         font.pixelSize: 9
         Layout.alignment: Qt.AlignVCenter
       }
@@ -97,11 +98,11 @@ Item {
           width: actAsStop ? 44 : 56
           height: 22
           radius: 5
-          color: actAsStop ? "#f38ba8" : "#89b4fa"
+          color: actAsStop ? inputBar.theme.red : inputBar.theme.accent
           Text {
             anchors.centerIn: parent
             text: sendBtn.actAsStop ? "■ 中止" : "发送"
-            color: "#1e1e2e"
+            color: inputBar.theme.onAccent
             font.pixelSize: 10
             font.bold: true
           }
@@ -121,14 +122,14 @@ Item {
       width: parent.width
       height: editor.implicitHeight + 10
       radius: 8
-      color: "#242437"
+      color: inputBar.theme ? inputBar.theme.surfaceAlt : "#242437"
       TextArea {
         id: editor
         anchors.fill: parent
         anchors.margins: 6
-        color: "#cdd6f4"
+        color: inputBar.theme ? inputBar.theme.text : "#cdd6f4"
         placeholderText: inputBar.streaming ? "助手回复中…（发送将排队）" : "输入消息…"
-        placeholderTextColor: "#585b70"
+        placeholderTextColor: inputBar.theme ? inputBar.theme.faint : "#585b70"
         font.pixelSize: 12
         wrapMode: TextEdit.Wrap
         selectByMouse: true

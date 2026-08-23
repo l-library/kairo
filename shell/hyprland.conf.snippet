@@ -6,5 +6,19 @@ exec-once = /home/liborui/Documents/kairo/scripts/toggle-kairo.sh --start-safe
 # 唤起/隐藏浮窗
 bind = SUPER, A, exec, /home/liborui/Documents/kairo/scripts/toggle-kairo.sh
 
-# 可选：kairo 浮窗以普通层窗口显示时强制浮动（使用 PanelWindow 时无需此规则）
+# 主题切换可从外部调用：
+#   quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo setTheme light
+# 例如绑定：bind = SUPER, T, exec, quickshell ipc -p ~/Documents/kairo/shell/config.qml call kairo setTheme light
+
+# ---- 动画说明 ----
+# kairo 浮窗是 layer-shell 窗口（PanelWindow），Hyprland 的 windowsIn/windowrule
+# 动画只作用于普通窗口，无法驱动 layer 窗口。滑入动画由 QML 实现：
+#   - 显示：内容从左侧屏幕外滑入（OutCubic 280ms + 淡入）
+#   - 隐藏：快速缩回（160ms）
+# 位置：左边缘垂直居中（layer-shell 未锚定维度自动居中，margins.left = 12）
+#
+# 若未来改用普通浮窗（FloatingWindow），可启用下面的 Hyprland 动画规则：
 # windowrulev2 = float, class:^(org.quickshell)$, title:^(kairo)$
+# windowrulev2 = size 500 680, class:^(org.quickshell)$, title:^(kairo)$
+# windowrulev2 = move 12 50%, class:^(org.quickshell)$, title:^(kairo)$
+# windowrulev2 = animation slide, class:^(org.quickshell)$, title:^(kairo)$

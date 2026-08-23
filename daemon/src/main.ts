@@ -16,7 +16,7 @@ import type { WsServerEvent } from "./ws-types.js";
 
 const config = resolveConfig();
 
-// --- 模式持久化（写入 ~/.config/kairo/settings.json） ---
+// --- 模式/主题持久化（写入 ~/.config/kairo/settings.json） ---
 function readSettings(): Record<string, unknown> {
   try {
     if (existsSync(config.settingsPath)) {
@@ -27,11 +27,26 @@ function readSettings(): Record<string, unknown> {
   }
   return {};
 }
+function writeSettings(settings: Record<string, unknown>): void {
+  writeFileSync(config.settingsPath, JSON.stringify(settings, null, 2) + "\n");
+}
 function persistMode(mode: KairoMode): void {
   const settings = readSettings();
   settings.defaultMode = mode;
-  writeFileSync(config.settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  writeSettings(settings);
 }
+const themeStore = {
+  get: () => {
+    const t = readSettings().theme;
+    return t === "light" ? "light" : "dark";
+  },
+  set: (theme: string) => {
+    const settings = readSettings();
+    settings.theme = theme;
+    writeSettings(settings);
+    console.log(`[kairo-daemon] 主题已保存: ${theme}`);
+  },
+};
 const savedMode: KairoMode = readSettings().defaultMode === "chat" ? "chat" : "command";
 
 // --- 确认门注册表 + 事件桥 ---
@@ -77,8 +92,8 @@ const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });
 const httpServer = createServer(startHttpApi({ agent, sessions, token: config.token }));
 
 async function main(): Promise<void> {
-  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions });
-  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions });
+  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions, themeStore });
+  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions, themeStore });
   await agent.start();
 
   httpServer.listen(config.port, config.host, () => {
