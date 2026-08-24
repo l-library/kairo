@@ -45,6 +45,7 @@ Rectangle {
     TitleBar {
       id: titleBar
       Layout.fillWidth: true
+      radius: chat.radius
       theme: chat.theme
       sessionName: chat.client ? chat.client.sessionName : ""
       mode: chat.client ? chat.client.mode : "command"

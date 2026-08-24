@@ -29,11 +29,17 @@ Item {
   signal thinkingSelected(string level)
 
   readonly property bool isLight: theme && theme.palette === "light"
+  // 顶部圆角半径：与面板（ChatPanel.radius）保持一致；只圆上方两角，避免盖住面板的圆角
+  property real radius: 14
 
   Rectangle {
     width: parent.width
     height: 34
     color: tb.theme ? tb.theme.bgAlt : "#181825"
+    topLeftRadius: tb.radius
+    topRightRadius: tb.radius
+    bottomLeftRadius: 0
+    bottomRightRadius: 0
 
     Row {
       id: leftRow
