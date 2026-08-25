@@ -141,10 +141,16 @@ Item {
         selectByMouse: true
         Keys.onReturnPressed: function (event) {
           if (event.modifiers & Qt.ShiftModifier) {
-            return // 换行
+            // Shift+Enter 换行：显式插入换行并吞掉事件。
+            // 不能依赖默认 fall-through——Quick Controls TextArea 的键盘
+            // 事件不会在 Keys 未 accept 时回落到默认换行（fcitx/IME 下
+            // 尤其明显），只会什么都不做。
+            editor.insert(editor.cursorPosition, "\n")
+            event.accepted = true
+            return
           }
-          inputBar.submit()
           event.accepted = true
+          inputBar.submit()
         }
       }
     }
