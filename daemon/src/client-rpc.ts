@@ -7,7 +7,8 @@
 import type { AgentBridge } from "./agent.js";
 import type { ApprovalRegistry } from "./approval.js";
 import type { KairoSessionManager } from "./session-manager.js";
-import type { BroadcastFn, WsClientEvent } from "./ws-types.js";
+import type { BroadcastFn, LocaleStore, WsClientEvent } from "./ws-types.js";
+import { isLang, localizeError, t, type Lang } from "./i18n.js";
 
 export interface ClientRpcDeps {
   approvals: ApprovalRegistry;
@@ -16,13 +17,17 @@ export interface ClientRpcDeps {
   broadcast: BroadcastFn;
   /** 主题持久化（settings.json 的 theme 字段） */
   themeStore: { get: () => string; set: (theme: string) => void };
+  /** 语言持久化（settings.json 的 locale 字段） */
+  localeStore: LocaleStore;
 }
 
 export async function handleClientEvent(
   msg: WsClientEvent,
   deps: ClientRpcDeps,
 ): Promise<void> {
-  const { approvals, agent, sessions, broadcast, themeStore } = deps;
+  const { approvals, agent, sessions, broadcast, themeStore, localeStore } = deps;
+  // 当前生效语言（未设置时默认 zh，与历史行为一致）
+  const lang: Lang = localeStore.get() === "en" ? "en" : "zh";
   switch (msg.type) {
     case "approve":
     case "reject":
@@ -54,7 +59,7 @@ export async function handleClientEvent(
     case "sessions_activate": {
       const target = await sessions.findPathById(msg.id);
       if (!target) {
-        broadcast({ type: "error", code: "session_not_found", message: `会话不存在: ${msg.id}` });
+        broadcast({ type: "error", code: "session_not_found", message: t(lang, "session_not_found", { id: msg.id }) });
         return;
       }
       await agent.abort(); // 切换前停止当前流式
@@ -65,12 +70,12 @@ export async function handleClientEvent(
     case "sessions_delete": {
       const active = agent.sessionId;
       if (active === msg.id) {
-        broadcast({ type: "error", code: "active_session", message: "不能删除当前活动会话" });
+        broadcast({ type: "error", code: "active_session", message: t(lang, "active_session") });
         return;
       }
       const deleted = await sessions.deleteById(msg.id);
       if (!deleted) {
-        broadcast({ type: "error", code: "session_not_found", message: `会话不存在: ${msg.id}` });
+        broadcast({ type: "error", code: "session_not_found", message: t(lang, "session_not_found", { id: msg.id }) });
         return;
       }
       broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
@@ -86,6 +91,21 @@ export async function handleClientEvent(
     case "theme_get":
       broadcast({ type: "theme_changed", theme: themeStore.get() });
       break;
+    case "locale_set": {
+      if (isLang(msg.locale)) {
+        localeStore.set(msg.locale);
+        broadcast({ type: "locale_changed", locale: msg.locale });
+      }
+      break;
+    }
+    case "locale_get": {
+      // 未设置过时不应返回——面板保持按 locale 自动检测
+      const v = localeStore.get();
+      if (isLang(v)) {
+        broadcast({ type: "locale_changed", locale: v });
+      }
+      break;
+    }
     case "models_list":
       broadcast({ type: "models_response", models: agent.listModels() });
       break;
@@ -105,7 +125,7 @@ export async function handleClientEvent(
           broadcast({
             type: "error",
             code: "model_set_failed",
-            message: err instanceof Error ? err.message : String(err),
+            message: localizeError(err, lang),
           });
         }
       }
@@ -127,7 +147,7 @@ export async function handleClientEvent(
           broadcast({
             type: "error",
             code: "thinking_set_failed",
-            message: err instanceof Error ? err.message : String(err),
+            message: localizeError(err, lang),
           });
         }
       }
@@ -149,7 +169,7 @@ export async function handleClientEvent(
         broadcast({
           type: "error",
           code: "plugins_install_failed",
-          message: `安装插件失败: ${err instanceof Error ? err.message : String(err)}`,
+          message: t(lang, "plugin_install_failed", { err: localizeError(err, lang) }),
         });
       }
       break;
@@ -164,7 +184,7 @@ export async function handleClientEvent(
         broadcast({
           type: "error",
           code: "plugins_remove_failed",
-          message: `移除插件失败: ${err instanceof Error ? err.message : String(err)}`,
+          message: t(lang, "plugin_remove_failed", { err: localizeError(err, lang) }),
         });
       }
       break;
@@ -182,7 +202,7 @@ export async function handleClientEvent(
           broadcast({
             type: "error",
             code: "provider_add_failed",
-            message: `添加提供商失败: ${err instanceof Error ? err.message : String(err)}`,
+            message: t(lang, "provider_add_failed", { err: localizeError(err, lang) }),
           });
         }
       }
@@ -198,7 +218,7 @@ export async function handleClientEvent(
           broadcast({
             type: "error",
             code: "provider_remove_failed",
-            message: `移除提供商失败: ${err instanceof Error ? err.message : String(err)}`,
+            message: t(lang, "provider_remove_failed", { err: localizeError(err, lang) }),
           });
         }
       }

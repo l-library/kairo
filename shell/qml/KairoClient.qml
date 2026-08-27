@@ -15,6 +15,7 @@ Item {
   // ---- 公共状态 ----
   property string mode: "command"
   property string theme: "dark"
+  property string appLanguage: "" // daemon 持久化的语言（zh/en；空 = 未设置）
   property string sessionId: ""
   property string sessionName: ""
   property bool connected: false
@@ -40,6 +41,7 @@ Item {
   signal approvalsChanged(var approval) // 新审批请求
   signal approvalResolved(var id, bool allowed)
   signal themePaletteChanged(string palette)
+  // 语言变化信号 = appLanguage 的自动生成信号 appLanguageChanged（赋值即触发）
 
   function connectToDaemon() {
     var home = ""
@@ -136,6 +138,12 @@ Item {
     send({ type: "provider_remove", id: id })
   }
 
+  // ---- 语言 ----
+  function setLocale(l) {
+    if (l !== "zh" && l !== "en") return
+    send({ type: "locale_set", locale: l })
+  }
+
   // ---- 协议处理 ----
   QtObject {
     id: protocol
@@ -166,6 +174,11 @@ Item {
           } else {
             // 连接后被动的同值事件也要触发一次，确保面板初始应用
             client.themePaletteChanged(ev.theme)
+          }
+          break
+        case "locale_changed":
+          if (ev.locale !== client.appLanguage) {
+            client.appLanguage = ev.locale // 赋值自动触发 appLanguageChanged
           }
           break
         case "mode_changed":
@@ -269,6 +282,7 @@ Item {
         // 连接成功：请求当前状态 + 模型清单（模型选择器数据）
         client.send({ type: "get_status" })
         client.send({ type: "theme_get" })
+        client.send({ type: "locale_get" })
         client.send({ type: "models_list" })
         client.send({ type: "providers_list" })
       } else {

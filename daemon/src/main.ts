@@ -12,6 +12,7 @@ import { startHttpApi } from "./http.js";
 import { startWsServer } from "./ws.js";
 import { startPanelSocket, type PanelSocketHandle } from "./panel-socket.js";
 import type { KairoMode } from "./modes.js";
+import type { Lang } from "./i18n.js";
 import type { WsServerEvent } from "./ws-types.js";
 
 const config = resolveConfig();
@@ -47,6 +48,21 @@ const themeStore = {
     console.log(`[kairo-daemon] 主题已保存: ${theme}`);
   },
 };
+// 语言持久化（settings.json locale 字段；“” = 从未设置，UI 按系统 locale 自动）
+const localeStore = {
+  get: () => {
+    const v = readSettings().locale;
+    return typeof v === "string" ? v : "";
+  },
+  set: (locale: string) => {
+    if (locale !== "zh" && locale !== "en") return;
+    const settings = readSettings();
+    settings.locale = locale;
+    writeSettings(settings);
+    console.log(`[kairo-daemon] 语言已保存: ${locale}`);
+  },
+};
+const currentLang = (): Lang => (localeStore.get() === "en" ? "en" : "zh");
 const savedMode: KairoMode = readSettings().defaultMode === "chat" ? "chat" : "command";
 
 // --- 确认门注册表 + 事件桥 ---
@@ -82,7 +98,7 @@ const approvals = new ApprovalRegistry(config, {
     broadcast({ type: "approval_resolved", id, allowed });
     console.log(`[approval] ${allowed ? "批准" : "拒绝"}: ${id}`);
   },
-});
+}, currentLang);
 
 // --- AgentBridge / 会话管理 ---
 const agent = new AgentBridge(
@@ -92,11 +108,14 @@ const agent = new AgentBridge(
   persistMode,
   savedMode,
   () => sessions.listWithActive(agent.activeSessionInfo()),
+  currentLang,
 );
 const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });
 
 // --- HTTP + WS ---
-const httpServer = createServer(startHttpApi({ agent, sessions, token: config.token }));
+const httpServer = createServer(
+  startHttpApi({ agent, sessions, token: config.token, localeStore }),
+);
 
 /**
  * 确保内置技能存在（正常由 install.sh 同步；未运行 install.sh 的机器由 daemon 兜底）
@@ -116,8 +135,8 @@ function ensureBuiltinSkills(config: KairoConfig): void {
 
 async function main(): Promise<void> {
   ensureBuiltinSkills(config);
-  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions, themeStore });
-  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions, themeStore });
+  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions, themeStore, localeStore });
+  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions, themeStore, localeStore });
   await agent.start();
 
   httpServer.listen(config.port, config.host, () => {

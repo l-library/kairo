@@ -12,6 +12,7 @@ Item {
   width: parent?.width ?? 0
 
   property var theme: null
+  property var i18n: null // I18n 实例（语言切换 + 文案）
   property string sessionName: ""
   property string mode: "command"
   property bool connected: false
@@ -98,7 +99,7 @@ Item {
         border.color: tb.theme ? tb.theme.border : "#45475a"
         Text {
           anchors.centerIn: parent
-          text: tb.modelLabel !== "" ? tb.modelLabel : "模型"
+          text: tb.modelLabel !== "" ? tb.modelLabel : (tb.i18n ? tb.i18n.tr("titlebar.modelPlaceholder") : "模型")
           color: tb.theme ? tb.theme.subtext : "#a6adc8"
           font.pixelSize: 9
           elide: Text.ElideMiddle
@@ -128,7 +129,7 @@ Item {
         border.color: tb.theme ? tb.theme.border : "#45475a"
         Text {
           anchors.centerIn: parent
-          text: "思维:" + (tb.thinkingLevel !== "" ? tb.thinkingLevel : "?")
+          text: (tb.i18n ? tb.i18n.tr("titlebar.thinking") : "思维:") + (tb.thinkingLevel !== "" ? tb.thinkingLevel : "?")
           color: tb.theme ? tb.theme.subtext : "#a6adc8"
           font.pixelSize: 9
         }
@@ -141,6 +142,33 @@ Item {
             var next = levels[(cur + 1) % levels.length]
             tb.thinkingSelected(next)
           }
+        }
+      }
+    }
+
+    // 语言切换：中文↔EN
+    Rectangle {
+      id: langBtn
+      anchors.right: themeBtn.left
+      anchors.rightMargin: 4
+      anchors.verticalCenter: parent.verticalCenter
+      width: 26
+      height: 22
+      radius: 5
+      color: langMA.containsMouse ? (tb.theme ? tb.theme.surface : "#313244") : "transparent"
+      Text {
+        anchors.centerIn: parent
+        text: tb.i18n && tb.i18n.effective === "en" ? "EN" : "中"
+        color: tb.theme ? tb.theme.subtext : "#a6adc8"
+        font.pixelSize: 9
+        font.bold: true
+      }
+      MouseArea {
+        id: langMA
+        anchors.fill: parent
+        hoverEnabled: true
+        onClicked: {
+          if (tb.i18n) tb.i18n.setLang(tb.i18n.effective === "en" ? "zh" : "en")
         }
       }
     }
@@ -217,7 +245,7 @@ Item {
       Row {
         spacing: 4
         Text {
-          text: "思维:"
+          text: tb.i18n ? tb.i18n.tr("titlebar.thinking") : "思维:"
           color: tb.theme ? tb.theme.muted : "#6c7086"
           font.pixelSize: 10
           anchors.verticalCenter: parent.verticalCenter
@@ -250,7 +278,7 @@ Item {
 
       // 模型列表
       Text {
-        text: "模型（未鉴权不可选）"
+        text: tb.i18n ? tb.i18n.tr("titlebar.modelPopupNote") : "模型（未鉴权不可选）"
         color: tb.theme ? tb.theme.faint : "#585b70"
         font.pixelSize: 9
       }
@@ -289,7 +317,7 @@ Item {
               Layout.maximumWidth: 90
             }
             Text {
-              text: ok ? (cur ? "" : "") : "未鉴权"
+              text: ok ? (cur ? "" : "") : (tb.i18n ? tb.i18n.tr("titlebar.unauth") : "未鉴权")
               color: "#f38ba8"
               font.pixelSize: 8
               visible: !ok

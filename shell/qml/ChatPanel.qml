@@ -21,6 +21,7 @@ Rectangle {
 
   property var client: null // KairoClient 注入
   property var theme: null // Theme 实例注入
+  property var i18n: null // I18n 实例注入
   signal hideRequested()
   signal themeToggleRequested()
 
@@ -47,6 +48,7 @@ Rectangle {
       Layout.fillWidth: true
       radius: chat.radius
       theme: chat.theme
+      i18n: chat.i18n
       sessionName: chat.client ? chat.client.sessionName : ""
       mode: chat.client ? chat.client.mode : "command"
       connected: chat.client ? chat.client.connected : false
@@ -83,6 +85,7 @@ Rectangle {
         delegate: MessageBubble {
           width: messageList.width
           theme: chat.theme
+          i18n: chat.i18n
           row: model
           required property var model
         }
@@ -95,8 +98,8 @@ Rectangle {
         anchors.centerIn: parent
         visible: messageModel.count === 0
         text: chat.client && chat.client.mode === "chat"
-          ? "Chat 模式 · 纯对话\n输入 `/cmd` 切换 Command 模式"
-          : "Command 模式 · 可读写文件/执行命令\n输入 `/chat` 切换 Chat 模式"
+          ? (chat.i18n ? chat.i18n.tr("chat.emptyHint.chat") : "Chat 模式 · 纯对话\n输入 `/cmd` 切换 Command 模式")
+          : (chat.i18n ? chat.i18n.tr("chat.emptyHint.command") : "Command 模式 · 可读写文件/执行命令\n输入 `/chat` 切换 Chat 模式")
         color: chat.theme ? chat.theme.emptyHint : "#45475a"
         font.pixelSize: 12
         horizontalAlignment: Text.AlignHCenter
@@ -107,6 +110,7 @@ Rectangle {
       id: inputBar
       Layout.fillWidth: true
       theme: chat.theme
+      i18n: chat.i18n
       mode: chat.client ? chat.client.mode : "command"
       streaming: chat.client ? chat.client.streaming : false
       onSendRequested: function (text) {
@@ -127,6 +131,7 @@ Rectangle {
     topOffset: titleBar.height
     bottomOffset: inputBar.implicitHeight
     theme: chat.theme
+    i18n: chat.i18n
     sessions: chat.client ? chat.client.sessions : []
     activeSessionId: chat.client ? chat.client.sessionId : ""
     skills: chat.client ? chat.client.skills : []
@@ -156,6 +161,7 @@ Rectangle {
     id: approval
     anchors.fill: parent
     theme: chat.theme
+    i18n: chat.i18n
     approval: chat.client ? chat.client.pendingApproval : null
     allowKeyboard: true
     onResponded: function (allowed) {
@@ -185,7 +191,7 @@ Rectangle {
       var card = chat.toolIndex[id]
       if (card) {
         card.status = allowed ? "running" : "rejected"
-        if (!allowed) card.output = "（用户拒绝）"
+        if (!allowed) card.output = chat.i18n ? chat.i18n.tr("chat.userRejected") : "（用户拒绝）"
         chat.dirty = true
         chat.flush()
       }
@@ -256,7 +262,9 @@ Rectangle {
         chat.flush()
         break
       case "mode_changed":
-        chat.pushSystemMessage(ev.mode === "chat" ? "已切换到 Chat 模式（纯对话）" : "已切换到 Command 模式（可读写文件/执行命令）")
+        chat.pushSystemMessage(ev.mode === "chat"
+          ? (chat.i18n ? chat.i18n.tr("chat.modeSwitchedChat") : "已切换到 Chat 模式（纯对话）")
+          : (chat.i18n ? chat.i18n.tr("chat.modeSwitchedCommand") : "已切换到 Command 模式（可读写文件/执行命令）"))
         break
       case "session_active":
         // 只有会话真的切换（id 变化）才清屏；同 id 的重复事件（如自动命名）不清，
@@ -285,7 +293,7 @@ Rectangle {
         break
       }
       case "error":
-        chat.pushSystemMessage(ev.message || "发生错误")
+        chat.pushSystemMessage(ev.message || (chat.i18n ? chat.i18n.tr("chat.errorGeneric") : "发生错误"))
         break
       default:
         break

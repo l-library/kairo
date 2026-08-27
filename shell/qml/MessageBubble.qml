@@ -27,6 +27,7 @@ Item {
 
   required property var row
   property var theme: null
+  property var i18n: null // I18n 实例注入
   property bool copied: false
 
   readonly property bool isUser: bubble.row ? bubble.row.role === "user" : false
@@ -101,6 +102,7 @@ Item {
           text: row.thinking || ""
           open: row.thinkingOpen
           theme: bubble.theme
+          i18n: bubble.i18n
           onToggle: {
             var obj = bubble.row
             obj.thinkingOpen = !obj.thinkingOpen
@@ -214,7 +216,9 @@ Item {
         Text {
           id: copyTxt
           anchors.centerIn: parent
-          text: bubble.copied ? "已复制" : "COPY"
+          text: bubble.copied
+            ? (bubble.i18n ? bubble.i18n.tr("bubble.copied") : "已复制")
+            : "COPY"
           color: bubble.copied ? (bubble.theme ? bubble.theme.onAccent : "#1e1e2e") : (bubble.theme ? bubble.theme.subtext : "#a6adc8")
           font.pixelSize: 9
           font.bold: true

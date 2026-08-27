@@ -15,7 +15,7 @@ import { join } from "node:path";
 import type { AgentBridge } from "./agent.js";
 import type { ApprovalRegistry } from "./approval.js";
 import type { KairoSessionManager } from "./session-manager.js";
-import type { WsClientEvent } from "./ws-types.js";
+import type { WsClientEvent, LocaleStore } from "./ws-types.js";
 import { handleClientEvent } from "./client-rpc.js";
 
 export interface PanelSocketDeps {
@@ -24,6 +24,7 @@ export interface PanelSocketDeps {
   agent: AgentBridge;
   sessions: KairoSessionManager;
   themeStore: { get: () => string; set: (theme: string) => void };
+  localeStore: LocaleStore;
 }
 
 export interface PanelSocketHandle {
@@ -48,7 +49,7 @@ class LineSplitter {
 }
 
 export function startPanelSocket(deps: PanelSocketDeps): PanelSocketHandle {
-  const { stateDir, approvals, agent, sessions, themeStore } = deps;
+  const { stateDir, approvals, agent, sessions, themeStore, localeStore } = deps;
   const sockPath = join(stateDir, "panel.sock");
   if (existsSync(sockPath)) unlinkSync(sockPath);
 
@@ -76,7 +77,7 @@ export function startPanelSocket(deps: PanelSocketDeps): PanelSocketHandle {
       } catch {
         return;
       }
-      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: send, themeStore }).catch((err) => {
+      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: send, themeStore, localeStore }).catch((err) => {
         console.error("[panel-socket] 客户端事件处理失败:", err);
       });
     });

@@ -7,20 +7,33 @@ import type { ServerResponse, IncomingMessage } from "node:http";
 import type { AgentBridge } from "./agent.js";
 import type { KairoSessionManager } from "./session-manager.js";
 import type { KairoMode } from "./modes.js";
+import type { LocaleStore } from "./ws-types.js";
+import { t, type Lang } from "./i18n.js";
 
 export interface HttpDeps {
   agent: AgentBridge;
   sessions: KairoSessionManager;
   token: string;
+  /** 语言持久化（错误文案按当前语言输出） */
+  localeStore: LocaleStore;
 }
 
 interface KairoHttpError extends Error {
   status: number;
+  /** 文案键（存在则在 catch 中按当前语言格式化；否则透传 message） */
+  key?: string;
+  params?: Record<string, string | number>;
 }
 
-function error(status: number, message: string): KairoHttpError {
-  const err = new Error(message) as KairoHttpError;
+function error(
+  status: number,
+  key: string,
+  params?: Record<string, string | number>,
+): KairoHttpError {
+  const err = new Error(key) as KairoHttpError;
   err.status = status;
+  err.key = key;
+  err.params = params;
   return err;
 }
 
@@ -41,12 +54,14 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw error(400, "请求体不是合法 JSON");
+    throw error(400, "bad_json");
   }
 }
 
 export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: ServerResponse) => void {
-  const { agent, sessions, token } = deps;
+  const { agent, sessions, token, localeStore } = deps;
+  // 语言按每次请求惰性求值：面板切语言后 HTTP 错误文案即时跟随
+  const lang = (): Lang => (localeStore.get() === "en" ? "en" : "zh");
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // 鉴权
@@ -58,9 +73,11 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
     const url = new URL(req.url ?? "/", "http://kairo.local");
     const path = url.pathname;
     const method = req.method ?? "GET";
-    const body = method === "GET" ? {} : ((await readBody(req)) as Record<string, unknown>);
+    // 注意：readBody 抛出的 400 必须在 try 内——否则未捕获异常会杀掉整个 daemon
+    let body: Record<string, unknown> = {};
 
     try {
+      body = method === "GET" ? {} : ((await readBody(req)) as Record<string, unknown>);
       switch (true) {
         // ---------- 健康检查 ----------
         case method === "GET" && path === "/api/health":
@@ -82,7 +99,7 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
         case method === "POST" && /\/api\/sessions\/[^/]+\/activate$/.test(path): {
           const id = decodeURIComponent(path.split("/")[3]!);
           const target = await sessions.findPathById(id);
-          if (!target) throw error(404, `会话不存在: ${id}`);
+          if (!target) throw error(404, "session_not_found", { id });
           sendJson(res, 200, await agent.switchSession(target));
           break;
         }
@@ -90,10 +107,10 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
         case method === "DELETE" && /\/api\/sessions\/[^/]+$/.test(path): {
           const id = decodeURIComponent(path.split("/")[3]!);
           if (agent.status().sessionId === id) {
-            throw error(409, "不能删除当前活动会话，请先切换或新建会话");
+            throw error(409, "active_session_http");
           }
           const deleted = await sessions.deleteById(id);
-          if (!deleted) throw error(404, `会话不存在: ${id}`);
+          if (!deleted) throw error(404, "session_not_found", { id });
           sendJson(res, 200, { deleted: true, id });
           break;
         }
@@ -102,7 +119,7 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
         case method === "POST" && path === "/api/prompt": {
           const message = body.message;
           if (typeof message !== "string" || message.trim() === "") {
-            throw error(400, "message 字段必填（非空字符串）");
+            throw error(400, "message_required");
           }
           await agent.prompt(message);
           sendJson(res, 200, { accepted: true });
@@ -118,7 +135,7 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
         case method === "POST" && path === "/api/mode": {
           const mode = body.mode;
           if (mode !== "chat" && mode !== "command") {
-            throw error(400, "mode 字段必须为 chat 或 command");
+            throw error(400, "mode_invalid");
           }
           await agent.setMode(mode as KairoMode);
           sendJson(res, 200, { mode });
@@ -130,11 +147,16 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
           break;
 
         default:
-          throw error(404, `未找到路由: ${method} ${path}`);
+          throw error(404, "route_not_found", { method, path });
       }
     } catch (err) {
       const status = (err as KairoHttpError)?.status ?? 500;
-      const message = err instanceof Error ? err.message : String(err);
+      const e = err as KairoHttpError | null;
+      const message = e?.key
+        ? t(lang(), e.key, e.params ?? {})
+        : err instanceof Error
+          ? err.message
+          : String(err);
       if (status >= 500) console.error("[http] 处理失败:", err);
       sendJson(res, status, { error: message });
     }

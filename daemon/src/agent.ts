@@ -23,7 +23,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { KairoConfig } from "./config.js";
 import type { KairoMode } from "./modes.js";
-import { applyMode, modeHint, MODE_SYSTEM_PROMPT, MODE_TOOLS } from "./modes.js";
+import { applyMode, modeHint, modeSystemPrompt, MODE_TOOLS } from "./modes.js";
+import { KairoError, t, type Lang } from "./i18n.js";
 import type { ApprovalRegistry } from "./approval.js";
 import { createApprovalGateExtension } from "./approval.js";
 import type {
@@ -136,6 +137,8 @@ export class AgentBridge {
     initialMode: KairoMode,
     /** 注入列表回调，命名后广播最新会话列表（避免 agent 反向依赖 session-manager） */
     private getSessionList: () => Promise<SessionListItem[]>,
+    /** 当前语言（系统提示 / 会话命名 / 错误文案用） */
+    private locale: () => Lang = () => "zh",
   ) {
     this.mode = initialMode;
   }
@@ -172,12 +175,13 @@ export class AgentBridge {
         agentDir,
         resourceLoaderOptions: {
           extensionFactories: [createApprovalGateExtension(approvals, config)],
-          // 按模式注入系统提示：闭包在 loader 创建 / reload 时求值，读当前 mode。
+          // 按模式注入系统提示：闭包在 loader 创建 / reload 时求值，读当前 mode 与语言。
           // Chat 整体替换 pi 基础提示（其内置首句宣称可读文件/执行命令，
           // 即使无工具也会让模型误称能编辑文件）；Command 前置模式说明保留基础提示。
           systemPromptOverride: (base: string | undefined) => {
-            if (this.mode === "chat") return MODE_SYSTEM_PROMPT.chat;
-            return [MODE_SYSTEM_PROMPT.command, base].filter((s) => s && s.trim()).join("\n\n");
+            const lang = this.locale();
+            if (this.mode === "chat") return modeSystemPrompt("chat", lang);
+            return [modeSystemPrompt("command", lang), base].filter((s) => s && s.trim()).join("\n\n");
           },
           skillsOverride: (base) => ({
             ...base,
@@ -311,7 +315,7 @@ export class AgentBridge {
       await session
         .sendCustomMessage({
           customType: "kairo_mode_hint",
-          content: modeHint(mode),
+          content: modeHint(mode, this.locale()),
           display: false,
           details: { mode },
         })
@@ -427,11 +431,11 @@ export class AgentBridge {
         {
           // 必须传完整 Context 对象（含 tools:[]）；直接传消息数组会导致 SDK 内部
           // tools.map 崩溃（Cannot read properties of undefined (reading 'map')）
-          systemPrompt: "你是 kairo 的会话命名助手，只输出简洁的中文短标题。",
+          systemPrompt: t(this.locale(), "naming_prompt_system"),
           messages: [
             {
               role: "user",
-              content: `请为下面的对话生成一个简洁的中文标题（不超过 12 个字）。只输出标题本身，不要引号、标点或任何解释。\n\n对话开头：${clean.slice(0, 400)}`,
+              content: t(this.locale(), "naming_prompt_user", { text: clean.slice(0, 400) }),
             },
           ],
           tools: [],
@@ -548,7 +552,7 @@ export class AgentBridge {
       await session.abort().catch(() => {});
     }
     const model = mr.getModel?.(provider, modelId);
-    if (!model) throw new Error(`模型不存在: ${provider}/${modelId}`);
+    if (!model) throw new KairoError("model_not_found", { id: `${provider}/${modelId}` });
     await session.setModel(model as never);
   }
 
@@ -558,7 +562,7 @@ export class AgentBridge {
     if (!session) throw new Error("daemon 尚未就绪");
     const levels = session.getAvailableThinkingLevels();
     if (!levels.includes(level as never)) {
-      throw new Error(`当前模型不支持思维等级: ${level}（可用: ${levels.join("/")}）`);
+      throw new KairoError("thinking_unsupported", { level, levels: levels.join("/") });
     }
     session.setThinkingLevel(level as never);
   }
@@ -701,10 +705,10 @@ export class AgentBridge {
     const cleanId = id.trim();
     const cleanKey = apiKey.trim();
     if (!/^[A-Za-z0-9._-]+$/.test(cleanId)) {
-      throw new Error("提供商 id 只能包含字母、数字、点、下划线、连字符");
+      throw new KairoError("provider_id_invalid");
     }
-    if (!cleanKey) throw new Error("api key 不能为空");
-    if (cleanId === "kairo") throw new Error("kairo 为保留 id");
+    if (!cleanKey) throw new KairoError("api_key_required");
+    if (cleanId === "kairo") throw new KairoError("reserved_id");
 
     let fetched: { id: string; name?: string }[] = [];
     let normalizedBase = "";
@@ -766,7 +770,7 @@ export class AgentBridge {
     const cleanId = id.trim();
     const session = this.runtime?.session;
     if (session?.model?.provider === cleanId) {
-      throw new Error("不能移除当前正在使用的提供商，请先切换到其它提供商");
+      throw new KairoError("cannot_remove_active_provider");
     }
     // 1) auth.json 与 models.json 同步清理
     const auth = this.readJson<Record<string, unknown>>(this.authJsonPath(), {});
@@ -820,15 +824,15 @@ export class AgentBridge {
         signal: AbortSignal.timeout(15000),
       });
     } catch {
-      throw new Error(`无法连接 ${url}，请检查 baseUrl`);
+      throw new KairoError("fetch_conn_failed", { url });
     }
     if (!res.ok) {
-      throw new Error(`模型目录探测失败 ${url}: HTTP ${res.status}`);
+      throw new KairoError("fetch_list_failed", { url, status: res.status });
     }
     const body = (await res.json().catch(() => null)) as { data?: { id?: string }[] } | null;
     const ids = (body?.data ?? []).map((m) => m.id).filter((v): v is string => !!v);
     if (ids.length === 0) {
-      throw new Error(`模型目录探测返回空（${url} 不是 OpenAI 兼容端点？）`);
+      throw new KairoError("fetch_list_empty", { url });
     }
     return ids.map((id) => ({ id }));
   }

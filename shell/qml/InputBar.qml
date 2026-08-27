@@ -10,6 +10,7 @@ Item {
   width: parent?.width ?? 0
 
   property var theme: null
+  property var i18n: null // I18n 实例注入
   property string mode: "command"
   property bool streaming: false
   signal sendRequested(string text)
@@ -79,7 +80,7 @@ Item {
       }
 
       Text {
-        text: "Enter 发送 · Shift+Enter 换行"
+        text: inputBar.i18n ? inputBar.i18n.tr("input.enterHint") : "Enter 发送 · Shift+Enter 换行"
         color: inputBar.theme ? inputBar.theme.faint : "#585b70"
         font.pixelSize: 9
         Layout.alignment: Qt.AlignVCenter
@@ -102,7 +103,9 @@ Item {
           color: actAsStop ? inputBar.theme.red : inputBar.theme.accent
           Text {
             anchors.centerIn: parent
-            text: sendBtn.actAsStop ? "■ 中止" : "发送"
+            text: sendBtn.actAsStop
+              ? (inputBar.i18n ? inputBar.i18n.tr("input.stop") : "■ 中止")
+              : (inputBar.i18n ? inputBar.i18n.tr("input.send") : "发送")
             color: inputBar.theme.onAccent
             font.pixelSize: 10
             font.bold: true
@@ -134,7 +137,9 @@ Item {
         color: inputBar.theme ? inputBar.theme.text : "#cdd6f4"
         selectionColor: inputBar.theme ? inputBar.theme.accent : "#89b4fa"
         selectedTextColor: inputBar.theme ? inputBar.theme.onAccent : "#1e1e2e"
-        placeholderText: inputBar.streaming ? "助手回复中…（发送将排队）" : "输入消息…"
+        placeholderText: inputBar.streaming
+          ? (inputBar.i18n ? inputBar.i18n.tr("input.placeholderStreaming") : "助手回复中…（发送将排队）")
+          : (inputBar.i18n ? inputBar.i18n.tr("input.placeholder") : "输入消息…")
         placeholderTextColor: inputBar.theme ? inputBar.theme.faint : "#585b70"
         font.pixelSize: 12
         wrapMode: TextEdit.Wrap

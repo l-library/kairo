@@ -16,6 +16,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { KairoConfig } from "./config.js";
 import { computeEditDiff, computeWriteDiff } from "./diff.js";
+import { t, type Lang } from "./i18n.js";
 
 export type ApprovalKind = "edit" | "write" | "bash";
 
@@ -48,6 +49,8 @@ export class ApprovalRegistry {
   constructor(
     private config: KairoConfig,
     private events: ApprovalEvents,
+    /** 当前语言（拒绝文案展示用） */
+    readonly locale: () => Lang = () => "zh",
   ) {}
 
   /** 钩子调用：挂起直到批准/拒绝/超时 */
@@ -108,7 +111,6 @@ export function createApprovalGateExtension(
       if (config.readOnlyAutoApprove.includes(event.toolName)) {
         return undefined;
       }
-
       let request: ApprovalRequest;
       if (isToolCallEventType("edit", event)) {
         const { input } = event;
@@ -157,7 +159,7 @@ export function createApprovalGateExtension(
 
       const allowed = await registry.requestApproval(request);
       if (!allowed) {
-        return { block: true, reason: "该操作被用户拒绝" };
+        return { block: true, reason: t(registry.locale(), "rejected_by_user") };
       }
       return undefined;
     });

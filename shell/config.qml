@@ -41,6 +41,25 @@ PanelWindow {
     value: client.theme
   }
 
+  // 双语支持单例：语言由用户切换（setLang）或 daemon 回传（locale_changed）驱动
+  I18n {
+    id: i18n
+  }
+  Connections {
+    target: i18n
+    // 用户切换 → 持久化到 daemon settings.json
+    function onLocaleChanged(l) {
+      client.setLocale(l)
+    }
+  }
+  Connections {
+    target: client
+    // daemon 回传生效语言 → 应用到界面（幂等）
+    function onAppLanguageChanged() {
+      i18n.setLang(client.appLanguage)
+    }
+  }
+
   KairoClient {
     id: client
   }
@@ -59,6 +78,7 @@ PanelWindow {
       radius: 14
       theme: theme
       client: client
+      i18n: i18n
       focus: true
       onHideRequested: panel.hidePanel()
       onThemeToggleRequested: panel.toggleTheme()

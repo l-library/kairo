@@ -4,6 +4,8 @@ Hyprland 上的即用型桌面 AI 助手：**quickshell 浮窗（QML）** + **PI
 
 `Super+A` 随叫随用，Chat / Command 双模式：纯对话不碰工具，完整 agentic 时写操作先弹 diff 确认、跑命令先确认。
 
+**语言**：中文 | [English](README.en.md)
+
 ## 功能特性
 
 - **双模式**：Chat 纯对话（无工具调用）；Command 完整 agentic（read/write/edit/bash/grep/find/ls 共 7 个内置工具）。

@@ -9,7 +9,7 @@ import type { Server } from "node:http";
 import type { AgentBridge } from "./agent.js";
 import type { ApprovalRegistry } from "./approval.js";
 import type { KairoSessionManager } from "./session-manager.js";
-import type { WsClientEvent } from "./ws-types.js";
+import type { WsClientEvent, LocaleStore } from "./ws-types.js";
 import { handleClientEvent } from "./client-rpc.js";
 
 export interface WsServerDeps {
@@ -19,10 +19,11 @@ export interface WsServerDeps {
   agent: AgentBridge;
   sessions: KairoSessionManager;
   themeStore: { get: () => string; set: (theme: string) => void };
+  localeStore: LocaleStore;
 }
 
 export function startWsServer(deps: WsServerDeps): WebSocketServer {
-  const { httpServer, token, approvals, agent, sessions, themeStore } = deps;
+  const { httpServer, token, approvals, agent, sessions, themeStore, localeStore } = deps;
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", (req, socket, head) => {
@@ -63,7 +64,7 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
       } catch {
         return;
       }
-      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: (ev) => sendTo(ws, ev), themeStore }).catch(
+      void handleClientEvent(msg, { approvals, agent, sessions, broadcast: (ev) => sendTo(ws, ev), themeStore, localeStore }).catch(
         (err) => console.error("[ws] 客户端事件处理失败:", err),
       );
     });

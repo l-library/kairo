@@ -9,6 +9,8 @@ kairo 使用与 pi 相同的技能格式：每个技能是一个目录
 `~/.config/kairo/agent/skills/<技能名>/SKILL.md`，目录下的内容会被
 加载进上下文（Command 模式下生效）。
 
+**语言**：中文 | [English](SKILL.en.md)
+
 ## 技能的位置与生效
 
 - 技能目录：`~/.config/kairo/agent/skills/<name>/`

@@ -15,6 +15,9 @@ export type WsClientEvent =
   | { type: "sessions_delete"; id: string }
   | { type: "theme_set"; theme: "dark" | "light" }
   | { type: "theme_get" }
+  // 语言（UI 上报/拉取；持久化到 settings.json）
+  | { type: "locale_set"; locale: string }
+  | { type: "locale_get" }
   | { type: "get_status" }
   // 模型/思维等级
   | { type: "models_list" }
@@ -46,6 +49,7 @@ export type WsServerEvent =
   | { type: "approval_resolved"; id: string; allowed: boolean }
   | { type: "mode_changed"; mode: string }
   | { type: "theme_changed"; theme: string }
+  | { type: "locale_changed"; locale: "zh" | "en" }
   | { type: "session_active"; id: string; name?: string }
   | { type: "session_history"; messages: { role: "user" | "assistant"; text: string }[] }
   | { type: "session_list"; sessions: SessionListItem[] }
@@ -116,3 +120,9 @@ export interface ProviderInfo {
 }
 
 export type BroadcastFn = (event: WsServerEvent) => void;
+
+/** 语言持久化（settings.json locale 字段；get() 返回 "" 表示从未设置） */
+export interface LocaleStore {
+  get: () => string;
+  set: (locale: string) => void;
+}

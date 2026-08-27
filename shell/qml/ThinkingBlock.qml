@@ -11,6 +11,7 @@ Item {
   property string text: ""
   property bool open: false
   property var theme: null
+  property var i18n: null // I18n 实例注入
   signal toggle()
 
   Row {
@@ -25,7 +26,7 @@ Item {
     }
 
     Text {
-      text: "思考过程"
+      text: block.i18n ? block.i18n.tr("thinking.title") : "思考过程"
       color: block.theme ? block.theme.subtext : "#a6adc8"
       font.pixelSize: 11
       font.bold: true

@@ -26,6 +26,7 @@ Item {
   height: Math.max(0, (parent ? parent.height : 0) - topOffset - bottomOffset)
 
   property var theme: null
+  property var i18n: null // I18n 实例注入
   property var sessions: []
   property string activeSessionId: ""
   property var skills: []
@@ -58,7 +59,7 @@ Item {
     if (s.name && s.name !== "") return s.name
     var fm = String(s.firstMessage || "").trim().replace(/\s+/g, " ")
     if (fm !== "") return fm.length > 16 ? fm.slice(0, 16) + "…" : fm
-    return "新会话"
+    return sb.i18n ? sb.i18n.tr("sidebar.newSession") : "新会话"
   }
 
   Rectangle {
@@ -90,7 +91,7 @@ Item {
             color: sb.tab === 0 ? (theme ? theme.accent : "#89b4fa") : (theme ? theme.surface : "#313244")
             Text {
               anchors.centerIn: parent
-              text: "会话 (" + sb.sessions.length + ")"
+              text: sb.i18n ? sb.i18n.tr("sidebar.sessions", { n: sb.sessions.length }) : "会话 (" + sb.sessions.length + ")"
               color: sb.tab === 0 ? "#ffffff" : (theme ? theme.subtext : "#a6adc8")
               font.pixelSize: 11
               font.bold: sb.tab === 0
@@ -110,7 +111,7 @@ Item {
             color: sb.tab === 1 ? (theme ? theme.accent : "#89b4fa") : (theme ? theme.surface : "#313244")
             Text {
               anchors.centerIn: parent
-              text: "设置 (" + (sb.providers.length + sb.skills.length + sb.plugins.length) + ")"
+              text: sb.i18n ? sb.i18n.tr("sidebar.settings", { n: sb.providers.length + sb.skills.length + sb.plugins.length }) : "设置 (" + (sb.providers.length + sb.skills.length + sb.plugins.length) + ")"
               color: sb.tab === 1 ? "#ffffff" : (theme ? theme.subtext : "#a6adc8")
               font.pixelSize: 11
               font.bold: sb.tab === 1
@@ -154,7 +155,7 @@ Item {
           color: theme ? theme.surface : "#313244"
           Text {
             anchors.centerIn: parent
-            text: "＋ 新建会话"
+            text: sb.i18n ? sb.i18n.tr("sidebar.newBtn") : "＋ 新建会话"
             color: theme ? theme.subtext : "#a6adc8"
             font.pixelSize: 12
           }
@@ -248,7 +249,7 @@ Item {
                   : (delMA.containsMouse ? (theme ? theme.surfaceHover : "#3b4261") : "transparent")
                 Text {
                   anchors.centerIn: parent
-                  text: row.armed ? "确认删除" : "🗑"
+                  text: row.armed ? (sb.i18n ? sb.i18n.tr("sidebar.confirmDelete") : "确认删除") : "🗑"
                   color: row.armed ? "#ffffff" : (theme ? theme.muted : "#6c7086")
                   font.pixelSize: row.armed ? 10 : 9
                 }
@@ -291,7 +292,7 @@ Item {
 
           // ============ 提供商 ============
           Text {
-            text: "提供商 (" + sb.providers.length + ")"
+            text: sb.i18n ? sb.i18n.tr("sidebar.providers", { n: sb.providers.length }) : "提供商 (" + sb.providers.length + ")"
             font.pixelSize: 11
             font.bold: true
             color: theme ? theme.text : "#cdd6f4"
@@ -324,12 +325,12 @@ Item {
                   elide: Text.ElideRight
                 }
                 Text {
-                  text: modelData.authed ? "已鉴权" : "未鉴权"
+                  text: modelData.authed ? (sb.i18n ? sb.i18n.tr("sidebar.authed") : "已鉴权") : (sb.i18n ? sb.i18n.tr("sidebar.unauth") : "未鉴权")
                   color: modelData.authed ? (theme ? theme.green : "#a6e3a1") : (theme ? theme.yellow : "#f9e2af")
                   font.pixelSize: 8
                 }
                 Text {
-                  text: String(modelData.modelCount || 0) + " 模型"
+                  text: sb.i18n ? sb.i18n.tr("sidebar.modelsCount", { n: modelData.modelCount || 0 }) : String(modelData.modelCount || 0) + " 模型"
                   color: theme ? theme.muted : "#6c7086"
                   font.pixelSize: 8
                 }
@@ -358,7 +359,7 @@ Item {
             }
           }
           Text {
-            text: "添加提供商（baseUrl 留空则用 SDK 内置目录）"
+            text: sb.i18n ? sb.i18n.tr("sidebar.addProviderNote") : "添加提供商（baseUrl 留空则用 SDK 内置目录）"
             color: theme ? theme.faint : "#585b70"
             font.pixelSize: 9
             wrapMode: Text.Wrap
@@ -385,7 +386,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 background: null
-                placeholderText: "如 my-llm"
+                placeholderText: sb.i18n ? sb.i18n.tr("sidebar.providerIdPlaceholder") : "如 my-llm"
                 placeholderTextColor: theme ? theme.muted : "#6c7086"
                 color: theme ? theme.text : "#cdd6f4"
                 font.pixelSize: 10
@@ -444,7 +445,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 background: null
-                placeholderText: "可选，OpenAI 兼容端点"
+                placeholderText: sb.i18n ? sb.i18n.tr("sidebar.baseUrlPlaceholder") : "可选，OpenAI 兼容端点"
                 placeholderTextColor: theme ? theme.muted : "#6c7086"
                 color: theme ? theme.text : "#cdd6f4"
                 font.pixelSize: 10
@@ -459,7 +460,9 @@ Item {
               color: sb.providerBusy ? (theme ? theme.yellow : "#f9e2af") : (theme ? theme.accent : "#89b4fa")
               Text {
                 anchors.centerIn: parent
-                text: sb.providerBusy ? "添加中…" : "添加"
+                text: sb.providerBusy
+                  ? (sb.i18n ? sb.i18n.tr("sidebar.adding") : "添加中…")
+                  : (sb.i18n ? sb.i18n.tr("sidebar.add") : "添加")
                 color: theme ? theme.onAccent : "#ffffff"
                 font.pixelSize: 10
                 font.bold: true
@@ -482,7 +485,7 @@ Item {
 
           // ============ 技能（只读展示） ============
           Text {
-            text: "技能 (" + sb.skills.length + ")"
+            text: sb.i18n ? sb.i18n.tr("sidebar.skills", { n: sb.skills.length }) : "技能 (" + sb.skills.length + ")"
             font.pixelSize: 11
             font.bold: true
             color: theme ? theme.text : "#cdd6f4"
@@ -524,7 +527,7 @@ Item {
             }
           }
           Text {
-            text: "手动安装技能见 docs/skills.md · 或直接问我"
+            text: sb.i18n ? sb.i18n.tr("sidebar.skillsManualNote") : "手动安装技能见 docs/skills.md · 或直接问我"
             color: theme ? theme.faint : "#585b70"
             font.pixelSize: 9
             wrapMode: Text.Wrap
@@ -533,7 +536,7 @@ Item {
 
           // ============ pi 插件 ============
           Text {
-            text: "插件 (" + sb.plugins.length + ")"
+            text: sb.i18n ? sb.i18n.tr("sidebar.plugins", { n: sb.plugins.length }) : "插件 (" + sb.plugins.length + ")"
             font.pixelSize: 11
             font.bold: true
             color: theme ? theme.text : "#cdd6f4"
@@ -564,7 +567,9 @@ Item {
                   elide: Text.ElideRight
                 }
                 Text {
-                  text: modelData.scope === "project" ? "项目" : "用户"
+                  text: modelData.scope === "project"
+                    ? (sb.i18n ? sb.i18n.tr("sidebar.scopeProject") : "项目")
+                    : (sb.i18n ? sb.i18n.tr("sidebar.scopeUser") : "用户")
                   color: theme ? theme.faint : "#585b70"
                   font.pixelSize: 8
                 }
@@ -604,7 +609,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 background: null
-                placeholderText: "npm 包名 / git 地址…"
+                placeholderText: sb.i18n ? sb.i18n.tr("sidebar.pluginPlaceholder") : "npm 包名 / git 地址…"
                 placeholderTextColor: theme ? theme.faint : "#585b70"
                 color: theme ? theme.text : "#cdd6f4"
                 font.pixelSize: 10
@@ -619,7 +624,9 @@ Item {
               color: sb.pluginBusy ? (theme ? theme.yellow : "#f9e2af") : (theme ? theme.accent : "#89b4fa")
               Text {
                 anchors.centerIn: parent
-                text: sb.pluginBusy ? "安装中…" : "安装"
+                text: sb.pluginBusy
+                  ? (sb.i18n ? sb.i18n.tr("sidebar.installing") : "安装中…")
+                  : (sb.i18n ? sb.i18n.tr("sidebar.install") : "安装")
                 color: theme ? theme.onAccent : "#ffffff"
                 font.pixelSize: 10
                 font.bold: true

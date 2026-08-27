@@ -14,6 +14,7 @@ Item {
 
   required property var approval
   property var theme: null
+  property var i18n: null // I18n 实例注入
   property bool allowKeyboard: true
 
   signal responded(bool allowed)
@@ -52,7 +53,7 @@ Item {
         }
         Text {
           width: parent.width - 30
-          text: "确认操作"
+          text: dialog.i18n ? dialog.i18n.tr("approval.title") : "确认操作"
           color: dialog.theme ? dialog.theme.text : "#cdd6f4"
           font.pixelSize: 15
           font.bold: true
@@ -102,7 +103,7 @@ Item {
           spacing: 6
 
           Text {
-            text: "文件: " + ((dialog.approval && dialog.approval.target) || "")
+            text: (dialog.i18n ? dialog.i18n.tr("approval.file") : "文件: ") + ((dialog.approval && dialog.approval.target) || "")
             color: dialog.theme ? dialog.theme.subtext : "#a6adc8"
             font.pixelSize: 11
             font.family: "monospace"
@@ -141,7 +142,7 @@ Item {
           color: dialog.theme ? dialog.theme.green : "#a6e3a1"
           Text {
             anchors.centerIn: parent
-            text: "批准 (Enter)"
+            text: dialog.i18n ? dialog.i18n.tr("approval.approve") : "批准 (Enter)"
             color: dialog.theme ? dialog.theme.onAccent : "#1e1e2e"
             font.pixelSize: 12
             font.bold: true
@@ -158,7 +159,7 @@ Item {
           color: dialog.theme ? dialog.theme.red : "#f38ba8"
           Text {
             anchors.centerIn: parent
-            text: "拒绝 (Esc)"
+            text: dialog.i18n ? dialog.i18n.tr("approval.reject") : "拒绝 (Esc)"
             color: dialog.theme ? dialog.theme.onAccent : "#1e1e2e"
             font.pixelSize: 12
             font.bold: true
@@ -174,7 +175,7 @@ Item {
         id: hint
         width: parent.width
         visible: dialog.approval && dialog.approval.toolName === "bash"
-        text: "命令将在宿主环境执行，请确认命令内容安全"
+        text: dialog.i18n ? dialog.i18n.tr("approval.commandHint") : "命令将在宿主环境执行，请确认命令内容安全"
         color: dialog.theme ? dialog.theme.muted : "#6c7086"
         font.pixelSize: 10
         horizontalAlignment: Text.AlignHCenter
