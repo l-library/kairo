@@ -257,9 +257,10 @@ export class AgentBridge {
     this.unsubscribe = session.subscribe((event) => {
       const ws = normalizeEvent(event);
       if (ws) this.broadcast(ws);
-      // turn 结束后自动命名（仅未命名且有内容的会话）
+      // turn 结束后自动命名（仅未命名且有内容的会话）+ 发送通知
       if (event.type === "agent_end") {
         void this.maybeAutoName(session);
+        execFile('notify-send', ['Kairo', 'Task finished!']);
       }
     });
     this.broadcast({
@@ -293,7 +294,7 @@ export class AgentBridge {
   /** 中止当前流式/工具执行（含全部 pending 审批） */
   async abort(): Promise<void> {
     this.approvals.rejectAll("操作已被中止");
-    await this.runtime?.session.abort().catch(() => {});
+    await this.runtime?.session.abort().catch(() => { });
   }
 
   async setMode(mode: KairoMode): Promise<void> {
@@ -319,7 +320,7 @@ export class AgentBridge {
           display: false,
           details: { mode },
         })
-        .catch(() => {});
+        .catch(() => { });
     }
     this.broadcast({ type: "mode_changed", mode });
   }
@@ -445,10 +446,10 @@ export class AgentBridge {
       const parts = res.content;
       const text = Array.isArray(parts)
         ? parts
-            .filter((c) => c && typeof c === "object" && (c as { type?: string }).type === "text")
-            .map((c) => (c as { text?: string }).text ?? "")
-            .join(" ")
-            .trim()
+          .filter((c) => c && typeof c === "object" && (c as { type?: string }).type === "text")
+          .map((c) => (c as { text?: string }).text ?? "")
+          .join(" ")
+          .trim()
         : "";
       const title = text.replace(/^["'“”《》【】\s]+|["'“”《》【】\s]+$/g, "").slice(0, 24);
       console.log("[agent] 命名: LLM 结果原文=", JSON.stringify(text.slice(0, 80)));
@@ -549,7 +550,7 @@ export class AgentBridge {
     const mr = runtime?.services?.modelRuntime as unknown as KairoModelRuntime | undefined;
     if (!session || !mr) throw new Error("daemon 尚未就绪");
     if (session.isStreaming) {
-      await session.abort().catch(() => {});
+      await session.abort().catch(() => { });
     }
     const model = mr.getModel?.(provider, modelId);
     if (!model) throw new KairoError("model_not_found", { id: `${provider}/${modelId}` });
@@ -627,7 +628,7 @@ export class AgentBridge {
     const session = this.runtime?.session;
     if (!session) return;
     if (session.isStreaming) {
-      await session.abort().catch(() => {});
+      await session.abort().catch(() => { });
     }
     await session.reload().catch((err) => {
       console.error("[plugins] 会话 reload 失败（插件可能需重启 daemon 后生效）:", err);
@@ -867,7 +868,7 @@ export class AgentBridge {
   dispose(): void {
     this.unsubscribe?.();
     this.approvals.rejectAll("daemon 关闭");
-    void this.runtime?.dispose().catch(() => {});
+    void this.runtime?.dispose().catch(() => { });
     this.runtime = null;
   }
 }
