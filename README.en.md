@@ -2,13 +2,13 @@
 
 A ready-to-use desktop AI assistant for Hyprland: **quickshell popup (QML)** + **PI SDK (Node daemon)**.
 
-Press `Super+A` anytime. Two modes, Chat / Command: pure conversation never touches tools; full agentic shows a diff before writes and confirms before running commands.
+Press `Super+A` anytime. Three modes — Q&A / Chat / Command: Q&A is one question, one answer with nothing kept; pure conversation never touches tools; full agentic shows a diff before writes and confirms before running commands.
 
 **Language:** English | [中文](README.md)
 
 ## Features
 
-- **Two modes**: Chat — pure conversation (no tool calls); Command — full agentic (read/write/edit/bash/grep/find/ls, 7 built-in tools).
+- **Three modes**: Q&A — one question, one answer, no history, no trace (zero-burden quick asks); Chat — pure conversation (no tool calls); Command — full agentic (read/write/edit/bash/grep/find/ls, 7 built-in tools).
 - **Safety confirmation gate**: writes generate a diff first, commands show the full text before approval; read-only tools are auto-approved.
 - **Isolated configuration**: dedicated PI config directory `~/.config/kairo/agent` (mcp / skills / plugins / sessions are all independent of `~/.pi`).
 - **Session management**: single active session + history list, with new / switch / delete.

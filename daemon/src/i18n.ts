@@ -21,7 +21,7 @@ const zhTable: Record<string, string> = {
   // ---- HTTP 参数校验（http.ts） ----
   bad_json: "请求体不是合法 JSON",
   message_required: "message 字段必填（非空字符串）",
-  mode_invalid: "mode 字段必须为 chat 或 command",
+  mode_invalid: "mode 字段必须为 chat、command 或 qa",
   route_not_found: "未找到路由: {method} {path}",
   // ---- 插件 / 提供商（client-rpc.ts / agent.ts） ----
   plugin_install_failed: "安装插件失败: {err}",
@@ -57,7 +57,7 @@ const enTable: Record<string, string> = {
   // ---- HTTP 参数校验（http.ts） ----
   bad_json: "Request body is not valid JSON",
   message_required: "The \"message\" field is required (non-empty string)",
-  mode_invalid: "The \"mode\" field must be \"chat\" or \"command\"",
+  mode_invalid: "The \"mode\" field must be \"chat\", \"command\" or \"qa\"",
   route_not_found: "Route not found: {method} {path}",
   // ---- 插件 / 提供商（client-rpc.ts / agent.ts） ----
   plugin_install_failed: "Failed to install plugin: {err}",

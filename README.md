@@ -2,13 +2,13 @@
 
 Hyprland 上的即用型桌面 AI 助手：**quickshell 浮窗（QML）** + **PI SDK（Node daemon）**。
 
-`Super+A` 随叫随用，Chat / Command 双模式：纯对话不碰工具，完整 agentic 时写操作先弹 diff 确认、跑命令先确认。
+`Super+A` 随叫随用，问答 / Chat / Command 三模式：问答一问一答不留记录，纯对话不碰工具，完整 agentic 时写操作先弹 diff 确认、跑命令先确认。
 
 **语言**：中文 | [English](README.en.md)
 
 ## 功能特性
 
-- **双模式**：Chat 纯对话（无工具调用）；Command 完整 agentic（read/write/edit/bash/grep/find/ls 共 7 个内置工具）。
+- **三模式**：问答一问一答、无历史无痕迹（随手问零负担）；Chat 纯对话（无工具调用）；Command 完整 agentic（read/write/edit/bash/grep/find/ls 共 7 个内置工具）。
 - **安全确认门**：写操作先生成 diff、跑命令先确认全文才放行；只读工具自动批准。
 - **配置隔离**：独立 PI 配置目录 `~/.config/kairo/agent`（mcp / skills / plugins / 会话均与 `~/.pi` 无关）。
 - **会话管理**：单活跃会话 + 历史会话列表，支持新建 / 切换 / 删除。

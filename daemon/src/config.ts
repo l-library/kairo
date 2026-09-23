@@ -16,7 +16,7 @@ export const DEFAULTS = {
   settingsPath: join(HOME, ".config", "kairo", "settings.json"),
   host: "127.0.0.1",
   port: 44811,
-  defaultMode: "command" as "chat" | "command",
+  defaultMode: "command" as "chat" | "command" | "qa",
   commandTools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
   readOnlyAutoApprove: ["read", "grep", "find", "ls"],
   approvalTimeoutMs: 10 * 60 * 1000, // 10 分钟
@@ -25,7 +25,7 @@ export const DEFAULTS = {
 export interface KairoSettings {
   port?: number;
   host?: string;
-  defaultMode?: "chat" | "command";
+  defaultMode?: "chat" | "command" | "qa";
   workdir?: string;
   readOnlyAutoApprove?: string[];
   approvalTimeoutMs?: number;
@@ -50,7 +50,7 @@ export interface KairoConfig {
   workdir: string;
   stateDir: string;
   settingsPath: string;
-  defaultMode: "chat" | "command";
+  defaultMode: "chat" | "command" | "qa";
   commandTools: string[];
   readOnlyAutoApprove: string[];
   approvalTimeoutMs: number;

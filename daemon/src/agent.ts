@@ -9,6 +9,7 @@
  * 确认门（内联扩展）随会话重建自动重新挂载。
  */
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { unlink } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import {
@@ -128,6 +129,11 @@ export class AgentBridge {
   private mode: KairoMode;
   /** 自动命名进行中的会话 id（防重入） */
   private namingInFlight = new Set<string>();
+  /**
+   * 当前会话是否为本轮 QA 流程新建且尚未产生消息的一次性会话。
+   * 仅用于 qa 模式判题“是否需要换新会话”；rebind（新建/切换/恢复）置 false。
+   */
+  private qaSessionFresh = false;
 
   constructor(
     private config: KairoConfig,
@@ -180,7 +186,7 @@ export class AgentBridge {
           // 即使无工具也会让模型误称能编辑文件）；Command 前置模式说明保留基础提示。
           systemPromptOverride: (base: string | undefined) => {
             const lang = this.locale();
-            if (this.mode === "chat") return modeSystemPrompt("chat", lang);
+            if (this.mode !== "command") return modeSystemPrompt(this.mode, lang);
             return [modeSystemPrompt("command", lang), base].filter((s) => s && s.trim()).join("\n\n");
           },
           skillsOverride: (base) => ({
@@ -247,6 +253,8 @@ export class AgentBridge {
 
   private async rebindSession(session: AgentSession): Promise<void> {
     this.unsubscribe?.();
+    // 会话已替换（新建/切换/恢复）：qa 一次性会话标记作废，避免误跳过轮换
+    this.qaSessionFresh = false;
     // ① 清空该会话的 pending 审批（会话已切换，审批已无意义）
     this.approvals.rejectAll("会话已切换");
     // ② 先快照扩展工具（会话新建/恢复时全量注册），再按当前模式重设工具，
@@ -257,9 +265,14 @@ export class AgentBridge {
     this.unsubscribe = session.subscribe((event) => {
       const ws = normalizeEvent(event);
       if (ws) this.broadcast(ws);
-      // turn 结束后自动命名（仅未命名且有内容的会话）+ 发送通知
+      // turn 结束后：qa 模式清理一次性会话（跳过自动命名）；普通模式自动命名 + 发送通知
       if (event.type === "agent_end") {
-        void this.maybeAutoName(session);
+        if (this.mode === "qa") {
+          this.qaSessionFresh = false;
+          void this.discardQaSessionFile(session);
+        } else {
+          void this.maybeAutoName(session);
+        }
         execFile('notify-send', ['Kairo', 'Task finished!']);
       }
     });
@@ -276,12 +289,30 @@ export class AgentBridge {
     this.broadcast({ type: "status", status: this.status() });
   }
 
-  /** 发送消息（/chat /cmd 输入命令切模式） */
+  /** 发送消息（/chat /cmd /qa 输入命令切模式） */
   async prompt(text: string): Promise<void> {
     const session = this.runtime?.session;
     if (!session) throw new Error("daemon 尚未就绪");
-    if (text === "/chat" || text === "/cmd") {
-      await this.setMode(text === "/chat" ? "chat" : "command");
+    if (text === "/chat" || text === "/cmd" || text === "/qa") {
+      await this.setMode(text === "/chat" ? "chat" : text === "/cmd" ? "command" : "qa");
+      return;
+    }
+    if (this.mode === "qa") {
+      // 问答：一问一答，不留历史。
+      // ① 上一问仍在流式回答 → 中止（用户已确认：中止重答）
+      if (session.isStreaming) {
+        await this.abort();
+        this.qaSessionFresh = false;
+      }
+      // ② 当前会话不是干净的一次性会话（已有消息，或是切进 qa 前的旧会话）→ 换新会话，
+      //    保证上下文物理隔离；换会话会广播 session_active，UI 自动清掉上一轮问答
+      if (!this.qaSessionFresh || buildHistory(session).length > 0) {
+        await this.newSession();
+        this.qaSessionFresh = true;
+      }
+      const qaSession = this.runtime?.session;
+      if (!qaSession) throw new Error("daemon 尚未就绪");
+      await qaSession.prompt(text);
       return;
     }
     if (session.isStreaming) {
@@ -299,10 +330,16 @@ export class AgentBridge {
 
   async setMode(mode: KairoMode): Promise<void> {
     if (mode === this.mode) return;
+    const leavingQa = this.mode === "qa" && mode !== "qa";
     this.mode = mode;
+    this.qaSessionFresh = false;
     this.persistMode(mode);
     const session = this.runtime?.session;
     if (session) {
+      // 离开 qa：先中止流式（离开问答即放弃本轮回答）。旧会话文件可能已在
+      // agent_end 后删除，后续消息（含模式提示）不能追加到它上面，
+      // 因此 reload/applyMode 后先换新会话，再把模式提示写入新会话。
+      if (leavingQa && session.isStreaming) await this.abort();
       // 中途切模式：systemPromptOverride 只在 loader 创建 / reload 时求值，
       // 必须先 reload 让缓存系统提示按新模式重建，再 applyMode 重组提示。
       const loader = this.runtime?.services?.resourceLoader as
@@ -312,8 +349,14 @@ export class AgentBridge {
         console.error("[agent] 模式切换时资源加载器 reload 失败:");
       });
       applyMode(session, mode, this.extensionToolNames);
-      // 模式提示语以自定义消息注入（display:false，不触发新 turn，不显示在 UI）
-      await session
+      if (leavingQa) {
+        await this.newSession().catch((err) => {
+          console.error("[agent] 离开问答模式时换新会话失败:", err);
+        });
+      }
+      // 模式提示语以自定义消息注入（display:false，不触发新 turn，不显示在 UI；
+      // 离开 qa 时 runtime.session 已是新会话）
+      await this.runtime?.session
         .sendCustomMessage({
           customType: "kairo_mode_hint",
           content: modeHint(mode, this.locale()),
@@ -323,6 +366,26 @@ export class AgentBridge {
         .catch(() => { });
     }
     this.broadcast({ type: "mode_changed", mode });
+  }
+
+  /**
+   * 清理已答完的一次性问答会话文件（agent_end 后调用）。
+   * 仅 unlink 磁盘文件，内存会话保留（下一问会换新会话）；随后广播 session_list
+   * 同步侧边栏（qa 模式下活动会话本就不进列表，见 main.ts 的列表回调）。
+   */
+  private async discardQaSessionFile(session: AgentSession): Promise<void> {
+    try {
+      const file = session.sessionManager?.getSessionFile();
+      if (file && existsSync(file)) {
+        await unlink(file);
+        console.log("[agent] 问答会话已清理:", file);
+      }
+    } catch (err) {
+      console.error("[agent] 问答会话清理失败:", err);
+    } finally {
+      const list = await this.getSessionList();
+      this.broadcast({ type: "session_list", sessions: list });
+    }
   }
 
   get isStreaming(): boolean {
@@ -490,6 +553,14 @@ export class AgentBridge {
   /** 当前会话 ID（供调用方判断活动会话） */
   get sessionId(): string {
     return this.runtime?.session.sessionId ?? "";
+  }
+
+  /**
+   * 最新会话列表（经注入回调：listWithActive + qa 过滤，见 main.ts）。
+   * 所有对外下发 session_list 的路径统一走这里，避免各处重建列表时漏掉过滤。
+   */
+  sessionList(): Promise<SessionListItem[]> {
+    return this.getSessionList();
   }
 
   // =========================================================================

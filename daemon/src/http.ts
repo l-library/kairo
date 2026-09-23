@@ -89,7 +89,7 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
 
         // ---------- 会话 ----------
         case method === "GET" && path === "/api/sessions":
-          sendJson(res, 200, { sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
+          sendJson(res, 200, { sessions: await agent.sessionList() });
           break;
 
         case method === "POST" && path === "/api/sessions":
@@ -134,7 +134,7 @@ export function startHttpApi(deps: HttpDeps): (req: IncomingMessage, res: Server
         // ---------- 模式 ----------
         case method === "POST" && path === "/api/mode": {
           const mode = body.mode;
-          if (mode !== "chat" && mode !== "command") {
+          if (mode !== "chat" && mode !== "command" && mode !== "qa") {
             throw error(400, "mode_invalid");
           }
           await agent.setMode(mode as KairoMode);

@@ -53,7 +53,7 @@ export function startWsServer(deps: WsServerDeps): WebSocketServer {
     if (history.length > 0) {
       ws.send(JSON.stringify({ type: "session_history", messages: history }));
     }
-    void sessions.listWithActive(active).then((list) =>
+    void agent.sessionList().then((list) =>
       ws.send(JSON.stringify({ type: "session_list", sessions: list })),
     );
 

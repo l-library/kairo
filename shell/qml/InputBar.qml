@@ -30,7 +30,7 @@ Item {
       height: 24
       spacing: 8
 
-      // Chat / Command 切换
+      // Chat / 问答 / Command 切换
       Item {
         width: 44
         height: 20
@@ -51,6 +51,30 @@ Item {
           MouseArea {
             anchors.fill: parent
             onClicked: inputBar.modeRequested("chat")
+          }
+        }
+      }
+
+      Item {
+        width: 44
+        height: 20
+        Layout.alignment: Qt.AlignVCenter
+        Rectangle {
+          id: qaSegWrap
+          anchors.fill: parent
+          readonly property bool selected: inputBar.mode === "qa"
+          radius: 4
+          color: qaSegWrap.selected ? inputBar.theme.surface : "transparent"
+          border.color: qaSegWrap.selected ? inputBar.theme.subtext : inputBar.theme.border
+          Text {
+            anchors.centerIn: parent
+            text: inputBar.i18n ? inputBar.i18n.tr("input.qaLabel") : "问答"
+            color: qaSegWrap.selected ? inputBar.theme.subtext : inputBar.theme.muted
+            font.pixelSize: 10
+          }
+          MouseArea {
+            anchors.fill: parent
+            onClicked: inputBar.modeRequested("qa")
           }
         }
       }
@@ -138,7 +162,9 @@ Item {
         selectionColor: inputBar.theme ? inputBar.theme.accent : "#89b4fa"
         selectedTextColor: inputBar.theme ? inputBar.theme.onAccent : "#1e1e2e"
         placeholderText: inputBar.streaming
-          ? (inputBar.i18n ? inputBar.i18n.tr("input.placeholderStreaming") : "助手回复中…（发送将排队）")
+          ? (inputBar.i18n
+              ? inputBar.i18n.tr(inputBar.mode === "qa" ? "input.placeholderStreamingQa" : "input.placeholderStreaming")
+              : (inputBar.mode === "qa" ? "回答中…（发送将开始新一问一答）" : "助手回复中…（发送将排队）"))
           : (inputBar.i18n ? inputBar.i18n.tr("input.placeholder") : "输入消息…")
         placeholderTextColor: inputBar.theme ? inputBar.theme.faint : "#585b70"
         font.pixelSize: 12

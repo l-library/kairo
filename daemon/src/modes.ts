@@ -1,13 +1,16 @@
 /**
- * modes.ts — chat / command 双模式定义与切换
+ * modes.ts — chat / command / qa 三模式定义与切换
  *
- * 切换 = session.setActiveToolsByName()：同步重建系统提示，Chat 模式下
+ * 切换 = session.setActiveToolsByName()：同步重建系统提示，Chat/QA 模式下
  * 不残留任何工具描述。
  *
  * 系统提示：通过 ResourceLoader 的 systemPromptOverride 注入（见 agent.ts），
- * 按模式区分——Chat 模式整体替换 pi 的基础提示（其内置首句宣称可读文件/
+ * 按模式区分——Chat/QA 模式整体替换 pi 的基础提示（其内置首句宣称可读文件/
  * 执行命令，即使无工具也会让模型误称能编辑文件）；Command 模式前置模式
  * 说明并保留完整基础提示（工具列表动态生成）。
+ *
+ * QA（问答）模式：一问一答、无历史。上下文隔离由 agent.ts 在会话层保证
+ * （每问换新会话、答完删文件），本模块只负责工具集与系统提示。
  *
  * 双语：按当前语言（localeStore 持久化，agent.ts 传入）选用中/英提示，
  * 语言切换后会话重载/reload 时生效。
@@ -15,11 +18,12 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Lang } from "./i18n.js";
 
-export type KairoMode = "chat" | "command";
+export type KairoMode = "chat" | "command" | "qa";
 
 export const MODE_TOOLS: Record<KairoMode, string[]> = {
   chat: [],
   command: ["read", "bash", "edit", "write", "grep", "find", "ls"],
+  qa: [],
 };
 
 const MODE_HINT: Record<Lang, Record<KairoMode, string>> = {
@@ -27,11 +31,13 @@ const MODE_HINT: Record<Lang, Record<KairoMode, string>> = {
     chat: "你当前处于 Chat 模式：纯对话，不能调用任何工具。适合问答、闲聊、翻译与总结。",
     command:
       "你当前处于 Command 模式：可以读写文件、执行命令（读写文件前会先向用户展示差异等待确认）。请主动使用工具完成任务。",
+    qa: "你当前处于问答模式：一问一答，每一问相互独立、不留任何记录，不能调用任何工具。",
   },
   en: {
     chat: "You are currently in Chat mode: pure conversation, no tool calls allowed. Good for Q&A, casual chat, translation and summarization.",
     command:
       "You are currently in Command mode: you can read/write files and run commands (file changes are shown to the user for confirmation first). Proactively use tools to get the job done.",
+    qa: "You are currently in Q&A mode: one question, one answer. Each question is independent and nothing is kept. No tool calls allowed.",
   },
 };
 
@@ -65,6 +71,18 @@ const MODE_SYSTEM_PROMPT: Record<Lang, Record<KairoMode, string>> = {
 - 破坏性操作（覆盖、删除、移动、批量命令）先说明影响并征得用户同意。
 - 命令执行失败时读取报错、诊断并修正，不要反复尝试明显错误的方案。
 - 用中文回答，展示文件路径时写清楚。`,
+    qa: `你是 kairo，一个运行在桌面上的中文 AI 助手。当前处于 **问答模式（一问一答）**。
+
+【模式规则——严格遵守】
+- 每次只有一轮对话：用户提一个问题，你回答一次。本轮结束后不保留任何记忆。
+- 你看不到之前的任何问答，也不存在“上文”“刚才”“上次”——每一问都是全新的、相互独立的。
+- 回答必须自包含：不要引用不存在的上下文，不要说“如前所述”。
+- 你没有、也不允许使用任何工具：无法读取或编辑文件、执行命令、访问网络。
+  当用户提出此类需求时，请建议切换到 Command 模式（输入 /cmd 或点击模式按钮）。
+
+【风格】
+- 用中文回答，直接切入要点，准确、简洁，适合桌面速问速答的场景。
+- 不要虚构系统能力或超出纯对话范围的承诺。`,
   },
   en: {
     chat: `You are kairo, a desktop AI assistant. You are currently in **Chat mode (conversation only)**.
@@ -90,11 +108,22 @@ const MODE_SYSTEM_PROMPT: Record<Lang, Record<KairoMode, string>> = {
 - Destructive operations (overwrite, delete, move, bulk commands) — explain the impact and get the user's consent first.
 - When a command fails, read the error, diagnose and fix it; don't repeatedly try obviously wrong approaches.
 - Answer in English; show file paths clearly.`,
+    qa: `You are kairo, a desktop AI assistant. You are currently in **Q&A mode (one question, one answer)**.
+
+【Mode rules — strictly follow】
+- Each round is exactly one user question and one answer from you. Nothing is kept afterwards.
+- You cannot see any previous questions or answers. There is no "earlier", "just now" or "last time" — every question is brand new and independent.
+- Answers must be self-contained: never reference context that does not exist, never say "as mentioned above".
+- You have no tools and are not allowed to use any: you cannot read or edit files, run commands, or access the network. If the user asks for that, suggest switching to Command mode (type /cmd or click the mode button).
+
+【Style】
+- Answer in English; get straight to the point, accurately and concisely — this is quick desktop Q&A.
+- Do not invent system capabilities or promise anything beyond pure conversation.`,
   },
 };
 
 /**
- * 应用模式工具集：Command = 内置工具 ∪ 插件扩展工具；Chat 保持纯对话（无工具）。
+ * 应用模式工具集：Command = 内置工具 ∪ 插件扩展工具；Chat / QA 保持纯对话（无工具）。
  * 扩展工具名由 AgentBridge 在会话新建/重载后（SDK 默认全量注册时）快照并传入，
  * 避免 setActiveToolsByName 整体替换时把插件工具清掉。
  */
@@ -103,7 +132,7 @@ export function applyMode(
   mode: KairoMode,
   extensionTools: Iterable<string> = [],
 ): void {
-  const tools = mode === "chat" ? [] : [...MODE_TOOLS[mode], ...extensionTools];
+  const tools = mode === "command" ? [...MODE_TOOLS.command, ...extensionTools] : [];
   session.setActiveToolsByName([...new Set(tools)]);
 }
 

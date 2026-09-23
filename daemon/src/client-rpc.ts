@@ -43,7 +43,7 @@ export async function handleClientEvent(
       break;
     }
     case "mode": {
-      if (msg.mode === "chat" || msg.mode === "command") {
+      if (msg.mode === "chat" || msg.mode === "command" || msg.mode === "qa") {
         await agent.setMode(msg.mode);
       }
       break;
@@ -52,7 +52,7 @@ export async function handleClientEvent(
       const { id } = await agent.newSession(
         typeof msg.name === "string" && msg.name ? msg.name : undefined,
       );
-      broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
+      broadcast({ type: "session_list", sessions: await agent.sessionList() });
       void id;
       break;
     }
@@ -64,7 +64,7 @@ export async function handleClientEvent(
       }
       await agent.abort(); // 切换前停止当前流式
       await agent.switchSession(target);
-      broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
+      broadcast({ type: "session_list", sessions: await agent.sessionList() });
       break;
     }
     case "sessions_delete": {
@@ -78,7 +78,7 @@ export async function handleClientEvent(
         broadcast({ type: "error", code: "session_not_found", message: t(lang, "session_not_found", { id: msg.id }) });
         return;
       }
-      broadcast({ type: "session_list", sessions: await sessions.listWithActive(agent.activeSessionInfo()) });
+      broadcast({ type: "session_list", sessions: await agent.sessionList() });
       break;
     }
     case "theme_set": {
@@ -232,7 +232,7 @@ export async function handleClientEvent(
         broadcast({ type: "session_active", id: active.id, name: active.name });
         const history = agent.currentHistory();
         if (history.length > 0) broadcast({ type: "session_history", messages: history });
-        broadcast({ type: "session_list", sessions: await sessions.listWithActive(active) });
+        broadcast({ type: "session_list", sessions: await agent.sessionList() });
       }
       break;
   }

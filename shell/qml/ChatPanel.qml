@@ -36,6 +36,9 @@ Rectangle {
   property var toolIndex: ({})
   // 当前视图对应的会话 id（防御同会话的重复 session_active，如自动命名）
   property string _shownSessionId: ""
+  // 刚发出、尚未被服务端确认的用户消息：问答模式答完换新会话时，
+  // session_active 清屏会连带清掉它，用这个字段重新回填
+  property string lastSentText: ""
   // 防抖标记
   property bool dirty: false
 
@@ -97,9 +100,11 @@ Rectangle {
       Text {
         anchors.centerIn: parent
         visible: messageModel.count === 0
-        text: chat.client && chat.client.mode === "chat"
-          ? (chat.i18n ? chat.i18n.tr("chat.emptyHint.chat") : "Chat 模式 · 纯对话\n输入 `/cmd` 切换 Command 模式")
-          : (chat.i18n ? chat.i18n.tr("chat.emptyHint.command") : "Command 模式 · 可读写文件/执行命令\n输入 `/chat` 切换 Chat 模式")
+        text: !chat.client || chat.client.mode === "command"
+          ? (chat.i18n ? chat.i18n.tr("chat.emptyHint.command") : "Command 模式 · 可读写文件/执行命令\n输入 `/chat` 切换 Chat 模式")
+          : chat.client.mode === "qa"
+            ? (chat.i18n ? chat.i18n.tr("chat.emptyHint.qa") : "问答模式 · 一问一答，不留记录\n输入 `/cmd` 切换 Command 模式")
+            : (chat.i18n ? chat.i18n.tr("chat.emptyHint.chat") : "Chat 模式 · 纯对话\n输入 `/cmd` 切换 Command 模式")
         color: chat.theme ? chat.theme.emptyHint : "#45475a"
         font.pixelSize: 12
         horizontalAlignment: Text.AlignHCenter
@@ -117,6 +122,8 @@ Rectangle {
         chat.pushUserMessage(text)
         if (text === "/chat") { chat.client.setMode("chat"); return }
         if (text === "/cmd") { chat.client.setMode("command"); return }
+        if (text === "/qa") { chat.client.setMode("qa"); return }
+        chat.lastSentText = text
         chat.client.sendText(text)
       }
       onModeRequested: function (mode) { chat.client.setMode(mode) }
@@ -262,21 +269,38 @@ Rectangle {
         chat.flush()
         break
       case "mode_changed":
-        chat.pushSystemMessage(ev.mode === "chat"
-          ? (chat.i18n ? chat.i18n.tr("chat.modeSwitchedChat") : "已切换到 Chat 模式（纯对话）")
-          : (chat.i18n ? chat.i18n.tr("chat.modeSwitchedCommand") : "已切换到 Command 模式（可读写文件/执行命令）"))
+        if (ev.mode === "chat")
+          chat.pushSystemMessage(chat.i18n ? chat.i18n.tr("chat.modeSwitchedChat") : "已切换到 Chat 模式（纯对话）")
+        else if (ev.mode === "qa")
+          chat.pushSystemMessage(chat.i18n ? chat.i18n.tr("chat.modeSwitchedQa") : "已切换到问答模式（一问一答，不留记录）")
+        else
+          chat.pushSystemMessage(chat.i18n ? chat.i18n.tr("chat.modeSwitchedCommand") : "已切换到 Command 模式（可读写文件/执行命令）")
         break
       case "session_active":
         // 只有会话真的切换（id 变化）才清屏；同 id 的重复事件（如自动命名）不清，
-        // 否则刚完成的对话会突然消失
+        // 否则刚完成的对话会突然消失。清屏后若刚发出过提问（问答模式轮换会话），
+        // 回填该提问，保证新一轮问答完整可见。
         if (ev.id !== chat._shownSessionId) {
           chat._shownSessionId = ev.id
           chat.resetMessages()
+          if (chat.lastSentText !== "") {
+            messageModel.append({
+              id: "u" + Date.now(),
+              role: "user",
+              text: chat.lastSentText,
+              thinking: "",
+              thinkingOpen: false,
+              tools: [],
+              status: "done",
+            })
+          }
         }
+        chat.lastSentText = ""
         break
       case "session_history": {
         // 激活/切换后的历史回放（紧跟在 session_active 后）
         chat._shownSessionId = chat.client ? chat.client.sessionId : ev.id
+        chat.lastSentText = ""
         chat.resetMessages()
         var msgs = ev.messages || []
         for (var k = 0; k < msgs.length; k++) {

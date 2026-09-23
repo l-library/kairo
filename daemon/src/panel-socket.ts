@@ -68,7 +68,7 @@ export function startPanelSocket(deps: PanelSocketDeps): PanelSocketHandle {
     send({ type: "session_active", id: active.id, name: active.name });
     const history = agent.currentHistory();
     if (history.length > 0) send({ type: "session_history", messages: history });
-    void sessions.listWithActive(active).then((list) => send({ type: "session_list", sessions: list }));
+    void agent.sessionList().then((list) => send({ type: "session_list", sessions: list }));
 
     const splitter = new LineSplitter((line) => {
       let msg: WsClientEvent;

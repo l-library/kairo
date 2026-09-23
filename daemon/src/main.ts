@@ -63,7 +63,9 @@ const localeStore = {
   },
 };
 const currentLang = (): Lang => (localeStore.get() === "en" ? "en" : "zh");
-const savedMode: KairoMode = readSettings().defaultMode === "chat" ? "chat" : "command";
+const savedModeRaw = readSettings().defaultMode;
+const savedMode: KairoMode =
+  savedModeRaw === "chat" || savedModeRaw === "qa" ? savedModeRaw : "command";
 
 // --- 确认门注册表 + 事件桥 ---
 const wssRef: { current: ReturnType<typeof startWsServer> | null } = { current: null };
@@ -107,7 +109,16 @@ const agent = new AgentBridge(
   broadcast,
   persistMode,
   savedMode,
-  () => sessions.listWithActive(agent.activeSessionInfo()),
+  () =>
+    // qa 一次性会话不进侧边栏：过滤掉当前活动会话条目（文件答完即删，
+    // 不注入的话 listWithActive 会合成一条幽灵活动项）
+    sessions
+      .listWithActive(agent.activeSessionInfo())
+      .then((items) =>
+        agent.status().mode === "qa"
+          ? items.filter((s) => s.id !== agent.sessionId)
+          : items,
+      ),
   currentLang,
 );
 const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });

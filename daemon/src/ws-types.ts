@@ -9,7 +9,7 @@ export type WsClientEvent =
   | { type: "cancel" }
   // 面板控制（panel-socket 与 WS 共用同一事件族）
   | { type: "prompt"; message: string }
-  | { type: "mode"; mode: "chat" | "command" }
+  | { type: "mode"; mode: "chat" | "command" | "qa" }
   | { type: "sessions_new"; name?: string }
   | { type: "sessions_activate"; id: string }
   | { type: "sessions_delete"; id: string }
