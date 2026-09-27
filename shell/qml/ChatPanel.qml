@@ -36,9 +36,6 @@ Rectangle {
   property var toolIndex: ({})
   // 当前视图对应的会话 id（防御同会话的重复 session_active，如自动命名）
   property string _shownSessionId: ""
-  // 刚发出、尚未被服务端确认的用户消息：问答模式答完换新会话时，
-  // session_active 清屏会连带清掉它，用这个字段重新回填
-  property string lastSentText: ""
   // 防抖标记
   property bool dirty: false
 
@@ -123,7 +120,6 @@ Rectangle {
         if (text === "/chat") { chat.client.setMode("chat"); return }
         if (text === "/cmd") { chat.client.setMode("command"); return }
         if (text === "/qa") { chat.client.setMode("qa"); return }
-        chat.lastSentText = text
         chat.client.sendText(text)
       }
       onModeRequested: function (mode) { chat.client.setMode(mode) }
@@ -278,29 +274,16 @@ Rectangle {
         break
       case "session_active":
         // 只有会话真的切换（id 变化）才清屏；同 id 的重复事件（如自动命名）不清，
-        // 否则刚完成的对话会突然消失。清屏后若刚发出过提问（问答模式轮换会话），
-        // 回填该提问，保证新一轮问答完整可见。
+        // 否则刚完成的对话会突然消失。问答模式的“清屏后回填本轮提问”由 daemon
+        // 在轮换后紧跟着广播 session_history 完成，UI 不记忆任何待回填消息。
         if (ev.id !== chat._shownSessionId) {
           chat._shownSessionId = ev.id
           chat.resetMessages()
-          if (chat.lastSentText !== "") {
-            messageModel.append({
-              id: "u" + Date.now(),
-              role: "user",
-              text: chat.lastSentText,
-              thinking: "",
-              thinkingOpen: false,
-              tools: [],
-              status: "done",
-            })
-          }
         }
-        chat.lastSentText = ""
         break
       case "session_history": {
-        // 激活/切换后的历史回放（紧跟在 session_active 后）
+        // 激活/切换后的历史回放（紧跟在 session_active 后；问答轮换时含本轮提问）
         chat._shownSessionId = chat.client ? chat.client.sessionId : ev.id
-        chat.lastSentText = ""
         chat.resetMessages()
         var msgs = ev.messages || []
         for (var k = 0; k < msgs.length; k++) {

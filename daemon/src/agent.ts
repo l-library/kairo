@@ -305,10 +305,13 @@ export class AgentBridge {
         this.qaSessionFresh = false;
       }
       // ② 当前会话不是干净的一次性会话（已有消息，或是切进 qa 前的旧会话）→ 换新会话，
-      //    保证上下文物理隔离；换会话会广播 session_active，UI 自动清掉上一轮问答
+      //    保证上下文物理隔离；换会话广播的 session_active 会清空面板（连同刚发出的
+      //    问题气泡），因此这里紧接着回放本轮提问，保证新一轮问答完整可见。
+      //    UI 不做任何“记忆回填”，避免普通模式下手动新建会话时回显陈旧消息。
       if (!this.qaSessionFresh || buildHistory(session).length > 0) {
         await this.newSession();
         this.qaSessionFresh = true;
+        this.broadcast({ type: "session_history", messages: [{ role: "user", text }] });
       }
       const qaSession = this.runtime?.session;
       if (!qaSession) throw new Error("daemon 尚未就绪");
