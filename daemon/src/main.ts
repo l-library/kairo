@@ -110,15 +110,9 @@ const agent = new AgentBridge(
   persistMode,
   savedMode,
   () =>
-    // qa 一次性会话不进侧边栏：过滤掉当前活动会话条目（文件答完即删，
-    // 不注入的话 listWithActive 会合成一条幽灵活动项）
-    sessions
-      .listWithActive(agent.activeSessionInfo())
-      .then((items) =>
-        agent.status().mode === "qa"
-          ? items.filter((s) => s.id !== agent.sessionId)
-          : items,
-      ),
+    // 当前会话始终注入（合成条目置顶），qa 一次性会话也不例外：
+    // 侧边栏须始终显示并高亮当前对话（UI 按 id 匹配高亮，点击活动行无操作）
+    sessions.listWithActive(agent.activeSessionInfo()),
   currentLang,
 );
 const sessions = new KairoSessionManager({ sessionDir: config.sessionDir });
