@@ -29,6 +29,8 @@ Item {
   property var theme: null
   property var i18n: null // I18n 实例注入
   property bool copied: false
+  // 思考块展开/折叠请求（由外层 ChatPanel 写回消息行，保证流式刷新后状态保留）
+  signal thinkingToggleRequested()
 
   readonly property bool isUser: bubble.row ? bubble.row.role === "user" : false
   // 助手消息按空行分“段”（代码块内不切）；用户消息不切，整段显示
@@ -103,11 +105,7 @@ Item {
           open: row.thinkingOpen
           theme: bubble.theme
           i18n: bubble.i18n
-          onToggle: {
-            var obj = bubble.row
-            obj.thinkingOpen = !obj.thinkingOpen
-            bubble.row = obj // 触发更新
-          }
+          onToggle: bubble.thinkingToggleRequested()
         }
 
         // 工具卡

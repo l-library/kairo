@@ -165,6 +165,9 @@ Item {
           client.agentsRunning = ev.status.streaming
           client.modelLabel = ev.status.model || client.modelLabel
           client.thinkingLevel = ev.status.thinkingLevel || client.thinkingLevel
+          // status 快照也要恢复可用等级（守护进程重启/面板重连后，
+          // 否则思维等级选择器会从 UI 上消失，直到重新选一次模型）
+          client.thinkingLevels = ev.status.thinkingLevels || client.thinkingLevels
           client.connectionChanged(true)
           break
         case "theme_changed":

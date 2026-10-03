@@ -30,7 +30,9 @@ Rectangle {
     id: messageModel
   }
 
-  // 流式累加器；{ row, text, thinking, thinkingOpen, tools: [], status }
+  // 流式累加器；{ row, text, thinking, tools: [], status }
+  // thinkingOpen 是纯 UI 状态（用户点击展开/折叠），保存在消息行本身，
+  // 不进流式快照——否则 30ms 防抖刷新会把它盖回 false（思考中点开即弹回）。
   property var streamAcc: null
   // 工具执行中的卡名册：toolCallId → card（指向 streamAcc.tools 内的对象）
   property var toolIndex: ({})
@@ -72,25 +74,39 @@ Rectangle {
       Layout.fillHeight: true
       color: "transparent"
 
-      ListView {
+      // 消息流：Flickable + 全量 Repeater（不用 ListView）。
+      // ListView 按已实例化的代理估算 contentHeight，滚动时估算不断修正 →
+      // 滚动条长度跳变、难以拖拽；重开面板后估算回退还会让停留位置漂移。
+      // 这里 contentHeight = 消息列实际高度，滚动条长度稳定，contentY 原样保留。
+      Flickable {
         id: messageList
         anchors.fill: parent
         anchors.margins: 10
         clip: true
-        spacing: 12
-        model: messageModel
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        contentWidth: width
+        contentHeight: messageColumn.height
 
-        delegate: MessageBubble {
+        Column {
+          id: messageColumn
           width: messageList.width
-          theme: chat.theme
-          i18n: chat.i18n
-          row: model
-          required property var model
+          spacing: 12
+
+          Repeater {
+            model: messageModel
+            delegate: MessageBubble {
+              width: messageColumn.width
+              theme: chat.theme
+              i18n: chat.i18n
+              row: model
+              required property var model
+              required property int index
+              onThinkingToggleRequested: chat.toggleThinking(index)
+            }
+          }
         }
 
-        onCountChanged: if (chat._atBottom) positionViewAtEnd()
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
       }
 
       // 空状态提示
@@ -324,7 +340,6 @@ Rectangle {
       row: row,
       text: "",
       thinking: "",
-      thinkingOpen: false,
       tools: [],
       status: "streaming",
     }
@@ -338,18 +353,17 @@ Rectangle {
     // tools 必须复制为普通数组，ListModel 会做 QVariant 转换
     var toolsCopy = []
     for (var i = 0; i < chat.streamAcc.tools.length; i++) toolsCopy.push(chat.streamAcc.tools[i])
+    var old = messageModel.get(chat.streamAcc.row)
     var obj = {
-      id: "m" + Date.now(),
+      id: old ? old.id : "m" + Date.now(),
       role: "assistant",
       text: chat.streamAcc.text,
       thinking: chat.streamAcc.thinking,
-      thinkingOpen: chat.streamAcc.thinkingOpen,
+      // 保留用户当前的展开状态（UI 状态，不被流式快照覆盖）
+      thinkingOpen: old ? old.thinkingOpen : false,
       tools: toolsCopy,
       status: chat.streamAcc.status,
     }
-    // 保留稳定 id：拿原行 id
-    var old = messageModel.get(chat.streamAcc.row)
-    if (old) obj.id = old.id
     messageModel.set(chat.streamAcc.row, obj)
     chat.dirty = false
   }
@@ -364,7 +378,8 @@ Rectangle {
       role: "assistant",
       text: chat.streamAcc.text,
       thinking: chat.streamAcc.thinking,
-      thinkingOpen: chat.streamAcc.thinkingOpen,
+      // 保留用户当前的展开状态（UI 状态，不被流式快照覆盖）
+      thinkingOpen: old ? old.thinkingOpen : false,
       tools: toolsCopy,
       status: "done",
     })
@@ -405,6 +420,13 @@ Rectangle {
     chat.dirty = false
   }
 
+  // 思考块展开/折叠：写回消息行（而非临时改代理对象），流式刷新后才不会弹回。
+  function toggleThinking(idx) {
+    var r = messageModel.get(idx)
+    if (!r) return
+    messageModel.setProperty(idx, "thinkingOpen", !r.thinkingOpen)
+  }
+
   // ---- 防抖刷新 ----
   Timer {
     id: flusher
@@ -416,14 +438,22 @@ Rectangle {
 
   property bool _atBottom: true
 
-  // 滚动位置跟随
+  function scrollToEnd() {
+    messageList.contentY = Math.max(0, messageList.contentHeight - messageList.height)
+  }
+
+  // 滚动位置跟随：贴底时新内容/高度变化都保持贴底；非贴底时 contentY 原样保留
   Connections {
     target: messageList
     function onContentYChanged() {
       chat._atBottom = messageList.contentY >= messageList.contentHeight - messageList.height - 20
     }
     function onContentHeightChanged() {
-      if (chat._atBottom) messageList.positionViewAtEnd()
+      if (chat._atBottom) chat.scrollToEnd()
+    }
+    // 面板隐藏/重开时视图高度可能经过 0——贴底状态在高度恢复后重新贴底
+    function onHeightChanged() {
+      if (chat._atBottom) chat.scrollToEnd()
     }
   }
 
@@ -461,6 +491,18 @@ Rectangle {
       list: listArea.height,
       input: inputBar.height,
       inputImplicit: inputBar.implicitHeight,
+      scroll: {
+        y: Math.round(messageList.contentY * 10) / 10,
+        contentH: Math.round(messageList.contentHeight * 10) / 10,
+        viewH: Math.round(messageList.height * 10) / 10,
+        atBottom: chat._atBottom,
+        count: messageModel.count,
+      },
     })
   }
+
+  // 调试/测试辅助：消息列表与消息行原始状态（getDebugInfo 同源）
+  function getMessageList() { return messageList }
+  function getMessageRow(i) { return messageModel.get(i) }
+  function getMessageCount() { return messageModel.count }
 }

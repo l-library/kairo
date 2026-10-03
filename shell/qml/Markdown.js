@@ -14,6 +14,24 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;")
 }
 
+/**
+ * fenceInfo(line) → { ch, len, info, indent } 或 null
+ * 识别围栏代码块行（``` 或 ~~~，至少 3 个）。允许行首缩进——模型常把代码块
+ * 缩进在列表项内，旧版只认行首 ```，导致这类代码块被当普通文本渲染（原文露出反引号）。
+ */
+function fenceInfo(line) {
+  var m = /^\s*(`{3,}|~{3,})(.*)$/.exec(String(line))
+  if (!m) return null
+  var indent = 0
+  while (indent < line.length && line.charAt(indent) === " ") indent++
+  return { ch: m[1].charAt(0), len: m[1].length, info: m[2].trim(), indent: indent }
+}
+
+/** f 是否为 open 的闭合围栏：同字符、长度不小于开启行、无 info（CommonMark 规则） */
+function fenceCloses(open, f) {
+  return f.ch === open.ch && f.len >= open.len && !f.info
+}
+
 function inline(md, p) {
   var t = String(md)
   var codeBg = (p && p.codeBg) || "#313244"
@@ -58,6 +76,7 @@ function mdToHtml(md, palette) {
   var lines = String(md).replace(/\r\n/g, "\n").split("\n")
   var html = ""
   var inCode = false
+  var openFence = null
   var inList = false
   var inQuote = false
   var tableHead = null
@@ -78,6 +97,7 @@ function mdToHtml(md, palette) {
     if (inCode) {
       html += "</code></pre>"
       inCode = false
+      openFence = null
     }
   }
 
@@ -85,19 +105,30 @@ function mdToHtml(md, palette) {
     var raw = lines[i]
     var line = raw
 
-    // 代码块
-    if (/^```/.test(line)) {
-      if (inCode) {
-        closeCode()
-      } else {
+    // 代码块围栏（```/~~~，允许缩进；闭合须同字符、长度不小于开启行——
+    // ````md 里嵌 ``` 的写法不会提前闭合，内部围栏按代码原文输出）
+    var fence = fenceInfo(line)
+    if (fence) {
+      if (!inCode) {
         closeList(); closeQuote()
         html += '<pre style="font-family:monospace;background:' + codeBg + ';padding:8px 10px;border-radius:6px;color:' + codeText + ';white-space:pre-wrap;"><code>'
         inCode = true
+        openFence = fence
+        continue
       }
-      continue
+      if (fenceCloses(openFence, fence)) {
+        closeCode()
+        continue
+      }
+      // 非闭合围栏行：当代码内容，落到下方 inCode 分支原样输出
     }
     if (inCode) {
-      html += escapeHtml(line) + "\n"
+      var cl = line
+      // 开栏行有缩进时（列表内代码块），剥掉等量前导空格
+      var s = 0
+      while (s < cl.length && s < openFence.indent && cl.charAt(s) === " ") s++
+      if (s > 0) cl = cl.slice(s)
+      html += escapeHtml(cl) + "\n"
       continue
     }
 
@@ -269,6 +300,7 @@ function splitSegments(md) {
   if (!md) return []
   var lines = String(md).replace(/\r\n/g, "\n").split("\n")
   var segs = [], cur = [], inFence = false, hasFence = false, first = true
+  var openFence = null
   function flush() {
     if (!cur.length) return
     var text = cur.join("\n")
@@ -280,7 +312,19 @@ function splitSegments(md) {
   }
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i]
-    if (/^```/.test(line.trim())) { inFence = !inFence; hasFence = true }
+    // 与 mdToHtml 共用同一套围栏判定（```/~~~、允许缩进、闭合长度规则），
+    // 避免这里认为在代码块里、渲染层却当普通段落的错位
+    var f = fenceInfo(line)
+    if (f) {
+      if (!inFence) {
+        inFence = true
+        openFence = f
+        hasFence = true
+      } else if (fenceCloses(openFence, f)) {
+        inFence = false
+        openFence = null
+      }
+    }
     if (!inFence && !line.trim()) { flush(); continue }
     cur.push(line)
   }
@@ -322,7 +366,7 @@ function dialogueGroups(text) {
 /** 生成本文纯文本摘要（会话列表用） */
 function plainText(md) {
   if (!md) return ""
-  var t = String(md).replace(/```[\s\S]*?```/g, " [代码块] ")
+  var t = String(md).replace(/(```|~~~)[\s\S]*?\1/g, " [代码块] ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/[*_#>|]/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")

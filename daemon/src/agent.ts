@@ -936,6 +936,9 @@ export class AgentBridge {
       pendingApprovals: this.approvals.size,
       model: m ? `${m.provider}/${m.id}` : "",
       thinkingLevel: this.runtime?.session?.thinkingLevel ?? "",
+      // 面板重连/守护进程重启后仅靠 status 快照恢复 UI：不带可用等级，
+      // 思维等级选择器就会消失（之前只有 model_set 事件才下发）
+      thinkingLevels: this.runtime?.session?.getAvailableThinkingLevels() ?? [],
     };
   }
 

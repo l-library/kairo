@@ -84,6 +84,8 @@ export interface SessionStatus {
   /** 当前模型标签 provider/id */
   model?: string;
   thinkingLevel?: string;
+  /** 当前模型可用的思维等级（面板恢复 UI 用；旧版无此字段） */
+  thinkingLevels?: string[];
 }
 
 export interface ModelInfo {

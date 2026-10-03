@@ -45,7 +45,8 @@ Item {
       delegate: Item {
         id: g
         required property var modelData
-        width: parent.width
+        // 段重建时旧代理在拆毁中 parent 会短暂为 null，置 0 避免绑定报错
+        width: parent ? parent.width : 0
         implicitHeight: modelData.kind === "group"
           ? groupCol.implicitHeight
           : plainText.implicitHeight
