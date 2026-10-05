@@ -31,7 +31,10 @@ export type WsClientEvent =
   // 提供商（添加/移除）
   | { type: "providers_list" }
   | { type: "provider_add"; id: string; apiKey: string; baseUrl?: string }
-  | { type: "provider_remove"; id: string };
+  | { type: "provider_remove"; id: string }
+  // 滚动停留位置（面板关闭时保存，重开后按会话恢复）
+  | { type: "scroll_save"; sessionId: string; y: number; atBottom: boolean }
+  | { type: "scroll_get"; sessionId: string };
 
 /** 服务端 → 客户端 */
 export type WsServerEvent =
@@ -61,7 +64,14 @@ export type WsServerEvent =
   | { type: "plugins_changed"; plugins: PluginInfo[] }
   | { type: "providers_response"; providers: ProviderInfo[] }
   | { type: "providers_changed"; providers: ProviderInfo[] }
+  | { type: "scroll_state"; sessionId: string; pos: ScrollPos | null }
   | { type: "error"; code: string; message: string };
+
+/** 会话滚动停留位置（ui-state 持久化；pos 为 null 表示该会话无记录） */
+export interface ScrollPos {
+  y: number;
+  atBottom: boolean;
+}
 
 export interface SessionListItem {
   id: string;

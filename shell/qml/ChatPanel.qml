@@ -293,11 +293,16 @@ Rectangle {
         // 否则刚完成的对话会突然消失。问答模式的“清屏后回填本轮提问”由 daemon
         // 在轮换后紧跟着广播 session_history 完成，UI 不记忆任何待回填消息。
         if (ev.id !== chat._shownSessionId) {
+          // 切走前把旧会话的停留位置存起来（切回来时能恢复）
+          chat.saveScrollFor(chat._shownSessionId)
           chat._shownSessionId = ev.id
           chat.resetMessages()
         }
         break
       case "session_history": {
+        // 重放前先把当前视图的位置存回本会话（daemon 重启重连时位置不回退；
+        // 首连/切换时模型为空，saveScrollFor 内部会跳过）
+        chat.saveScrollFor(chat._shownSessionId)
         // 激活/切换后的历史回放（紧跟在 session_active 后；问答轮换时含本轮提问）
         chat._shownSessionId = chat.client ? chat.client.sessionId : ev.id
         chat.resetMessages()
@@ -313,6 +318,8 @@ Rectangle {
             status: "done",
           })
         }
+        // 回放完成后按会话恢复上次的滚动停留位置
+        chat.beginScrollRestore()
         break
       }
       case "error":
@@ -438,6 +445,12 @@ Rectangle {
 
   property bool _atBottom: true
 
+  // ---- 滚动停留位置记忆：关闭/切会话时保存，历史回放后恢复 ----
+  property string _restoreSession: "" // 待恢复的会话 id（校验 scroll_state 响应）
+  property real _restoreY: 0
+  property bool _restoreAtBottom: false
+  property bool restorePending: false // true = 等内容高度稳定后一次性落位
+
   function scrollToEnd() {
     messageList.contentY = Math.max(0, messageList.contentHeight - messageList.height)
   }
@@ -449,11 +462,64 @@ Rectangle {
       chat._atBottom = messageList.contentY >= messageList.contentHeight - messageList.height - 20
     }
     function onContentHeightChanged() {
+      // 恢复期间不跟随，等高度稳定后由 restoreSettle 一次性落位
+      if (chat.restorePending) { restoreSettle.restart(); return }
       if (chat._atBottom) chat.scrollToEnd()
     }
     // 面板隐藏/重开时视图高度可能经过 0——贴底状态在高度恢复后重新贴底
     function onHeightChanged() {
+      if (chat.restorePending) { restoreSettle.restart(); return }
       if (chat._atBottom) chat.scrollToEnd()
+    }
+    // 用户手动滚动 = 取消待恢复，不抢用户的操作
+    function onMovementStarted() {
+      chat.restorePending = false
+    }
+  }
+
+  // 把指定会话的当前停留位置上报 daemon 持久化（关闭面板 / 切换会话时调用）
+  function saveScrollFor(sessionId) {
+    if (!chat.client || !sessionId || messageModel.count === 0) return
+    chat.client.saveScrollState(sessionId, messageList.contentY, chat._atBottom)
+  }
+
+  // 历史回放完成后：向 daemon 拉取该会话上次的停留位置
+  function beginScrollRestore() {
+    if (!chat.client || !chat.client.sessionId) return
+    chat.restorePending = false // 作废旧会话的待恢复，防止迟到响应串台
+    chat._restoreSession = chat.client.sessionId
+    chat.client.requestScrollState(chat.client.sessionId)
+  }
+
+  // 应用恢复：贴底回到底部，否则回到保存的 contentY（夹紧到有效范围）。
+  // pos 为 null（该会话从没保存过）→ 保持回放后的顶部，与旧行为一致。
+  function applyScrollRestore() {
+    if (!chat.restorePending) return
+    chat.restorePending = false
+    var maxY = Math.max(0, messageList.contentHeight - messageList.height)
+    if (chat._restoreAtBottom) {
+      messageList.contentY = maxY
+    } else if (chat._restoreY > 0) {
+      messageList.contentY = Math.min(chat._restoreY, maxY)
+    }
+  }
+
+  // 内容高度稳定 150ms 后应用恢复（代理逐个实例化，contentHeight 分多次到位）
+  Timer {
+    id: restoreSettle
+    interval: 150
+    onTriggered: chat.applyScrollRestore()
+  }
+
+  Connections {
+    target: chat.client
+    function onScrollStateReceived(state) {
+      if (!state || state.sessionId !== chat._restoreSession) return
+      if (!state.pos) { chat.restorePending = false; return }
+      chat._restoreY = Number(state.pos.y) || 0
+      chat._restoreAtBottom = state.pos.atBottom === true
+      chat.restorePending = true
+      restoreSettle.restart()
     }
   }
 

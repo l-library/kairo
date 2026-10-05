@@ -124,6 +124,8 @@ PanelWindow {
 
   function hidePanel() {
     if (panel.hiding || !panel.visible) return
+    // 关闭前记住当前会话的停留位置（下次打开/重启后恢复）
+    chat.saveScrollFor(client.sessionId)
     panel.hiding = true
     // 快速滑出（向右缩回不可见即可，层窗口透明背景无视觉泄漏）
     slideOut.to = -(panel.width + 24)

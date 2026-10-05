@@ -11,6 +11,7 @@ import { KairoSessionManager } from "./session-manager.js";
 import { startHttpApi } from "./http.js";
 import { startWsServer } from "./ws.js";
 import { startPanelSocket, type PanelSocketHandle } from "./panel-socket.js";
+import { UiStateStore } from "./ui-state.js";
 import type { KairoMode } from "./modes.js";
 import type { Lang } from "./i18n.js";
 import type { WsServerEvent } from "./ws-types.js";
@@ -63,6 +64,8 @@ const localeStore = {
   },
 };
 const currentLang = (): Lang => (localeStore.get() === "en" ? "en" : "zh");
+// 面板 UI 状态（每会话滚动停留位置），存 stateDir/ui-state.json
+const uiState = new UiStateStore(join(config.stateDir, "ui-state.json"));
 const savedModeRaw = readSettings().defaultMode;
 const savedMode: KairoMode =
   savedModeRaw === "chat" || savedModeRaw === "qa" ? savedModeRaw : "command";
@@ -140,8 +143,8 @@ function ensureBuiltinSkills(config: KairoConfig): void {
 
 async function main(): Promise<void> {
   ensureBuiltinSkills(config);
-  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions, themeStore, localeStore });
-  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions, themeStore, localeStore });
+  wssRef.current = startWsServer({ httpServer, token: config.token, approvals, agent, sessions, themeStore, localeStore, uiState });
+  panelRef.current = startPanelSocket({ stateDir: config.stateDir, approvals, agent, sessions, themeStore, localeStore, uiState });
   await agent.start();
 
   httpServer.listen(config.port, config.host, () => {

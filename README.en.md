@@ -12,6 +12,7 @@ Press `Super+A` anytime. Three modes — Q&A / Chat / Command: Q&A is one questi
 - **Safety confirmation gate**: writes generate a diff first, commands show the full text before approval; read-only tools are auto-approved.
 - **Isolated configuration**: dedicated PI config directory `~/.config/kairo/agent` (mcp / skills / plugins / sessions are all independent of `~/.pi`).
 - **Session management**: single active session + history list, with new / switch / delete.
+- **Scroll position memory**: close with Super+A, reopen right where you left off — remembered per session and persisted by the daemon.
 - **Streaming Markdown rendering**: bubble replies, tool cards, approval dialogs; bilingual UI (中文 / English), Chinese input works out of the box.
 - **systemd-managed**: the daemon stays resident and restores the most recent session; the panel is summoned via a Hyprland keybind.
 

@@ -41,6 +41,8 @@ Item {
   signal approvalsChanged(var approval) // 新审批请求
   signal approvalResolved(var id, bool allowed)
   signal themePaletteChanged(string palette)
+  // 滚动停留位置回传（scroll_get 响应；state = {sessionId, pos: {y, atBottom}|null}）
+  signal scrollStateReceived(var state)
   // 语言变化信号 = appLanguage 的自动生成信号 appLanguageChanged（赋值即触发）
 
   function connectToDaemon() {
@@ -144,6 +146,17 @@ Item {
     send({ type: "locale_set", locale: l })
   }
 
+  // ---- 滚动停留位置 ----
+  function saveScrollState(sessionId, y, atBottom) {
+    if (!sessionId) return
+    send({ type: "scroll_save", sessionId: sessionId, y: y, atBottom: atBottom })
+  }
+
+  function requestScrollState(sessionId) {
+    if (!sessionId) return
+    send({ type: "scroll_get", sessionId: sessionId })
+  }
+
   // ---- 协议处理 ----
   QtObject {
     id: protocol
@@ -183,6 +196,9 @@ Item {
           if (ev.locale !== client.appLanguage) {
             client.appLanguage = ev.locale // 赋值自动触发 appLanguageChanged
           }
+          break
+        case "scroll_state":
+          client.scrollStateReceived(ev)
           break
         case "mode_changed":
           client.mode = ev.mode

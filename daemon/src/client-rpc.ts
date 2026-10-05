@@ -7,6 +7,7 @@
 import type { AgentBridge } from "./agent.js";
 import type { ApprovalRegistry } from "./approval.js";
 import type { KairoSessionManager } from "./session-manager.js";
+import type { UiStateStore } from "./ui-state.js";
 import type { BroadcastFn, LocaleStore, WsClientEvent } from "./ws-types.js";
 import { isLang, localizeError, t, type Lang } from "./i18n.js";
 
@@ -19,13 +20,15 @@ export interface ClientRpcDeps {
   themeStore: { get: () => string; set: (theme: string) => void };
   /** 语言持久化（settings.json 的 locale 字段） */
   localeStore: LocaleStore;
+  /** 面板 UI 状态（每会话滚动停留位置） */
+  uiState: UiStateStore;
 }
 
 export async function handleClientEvent(
   msg: WsClientEvent,
   deps: ClientRpcDeps,
 ): Promise<void> {
-  const { approvals, agent, sessions, broadcast, themeStore, localeStore } = deps;
+  const { approvals, agent, sessions, broadcast, themeStore, localeStore, uiState } = deps;
   // 当前生效语言（未设置时默认 zh，与历史行为一致）
   const lang: Lang = localeStore.get() === "en" ? "en" : "zh";
   switch (msg.type) {
@@ -221,6 +224,30 @@ export async function handleClientEvent(
             message: t(lang, "provider_remove_failed", { err: localizeError(err, lang) }),
           });
         }
+      }
+      break;
+    }
+    case "scroll_save": {
+      // 面板关闭/切会话时上报停留位置；非法值直接忽略
+      if (
+        typeof msg.sessionId === "string" &&
+        msg.sessionId &&
+        typeof msg.y === "number" &&
+        Number.isFinite(msg.y) &&
+        msg.y >= 0
+      ) {
+        uiState.setScroll(msg.sessionId, msg.y, msg.atBottom === true);
+      }
+      break;
+    }
+    case "scroll_get": {
+      if (typeof msg.sessionId === "string" && msg.sessionId) {
+        const saved = uiState.getScroll(msg.sessionId);
+        broadcast({
+          type: "scroll_state",
+          sessionId: msg.sessionId,
+          pos: saved ? { y: saved.y, atBottom: saved.atBottom } : null,
+        });
       }
       break;
     }

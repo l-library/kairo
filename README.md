@@ -12,6 +12,7 @@ Hyprland 上的即用型桌面 AI 助手：**quickshell 浮窗（QML）** + **PI
 - **安全确认门**：写操作先生成 diff、跑命令先确认全文才放行；只读工具自动批准。
 - **配置隔离**：独立 PI 配置目录 `~/.config/kairo/agent`（mcp / skills / plugins / 会话均与 `~/.pi` 无关）。
 - **会话管理**：单活跃会话 + 历史会话列表，支持新建 / 切换 / 删除。
+- **停留位置记忆**：Super+A 关闭再打开，对话回到上次停留的位置（按会话记忆，daemon 持久化，重启不丢）。
 - **流式 Markdown 渲染**：气泡化回复、工具卡、审批对话框，中文输入开箱即用。
 - **systemd 托管**：daemon 常驻并自动恢复最近会话，面板由 Hyprland keybind 唤起。
 
