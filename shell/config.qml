@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import QtQuick
 import "qml"
 
@@ -30,6 +31,14 @@ PanelWindow {
   exclusionMode: ExclusionMode.Ignore
   aboveWindows: true
   focusable: true
+
+  // 键盘焦点：可见时抓取 Exclusive（Hyprland 立刻把键盘交给本面板，
+  // Super+A 唤起后无需点击即可直接输入；rofi/wofi 同款机制）。
+  // focusable:true 对应 OnDemand（点击才给键盘），故可见时覆盖为 Exclusive，
+  // 隐藏后回到 OnDemand，不影响其他窗口。
+  WlrLayershell.keyboardFocus: panel.visible
+    ? WlrKeyboardFocus.Exclusive
+    : WlrKeyboardFocus.OnDemand
 
   // 主题单例控制权归这里；client.theme 变化时跟随（含初始连接拉取）
   Theme {
