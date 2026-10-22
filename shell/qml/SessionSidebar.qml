@@ -78,27 +78,34 @@ Item {
     return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate()
   }
 
-  // 列表模型：按 modifiedAt 倒序（覆盖 daemon 的活动置顶顺序），并插入“近七天/更早”分组头
+  // 列表模型：按 modifiedAt 倒序（覆盖 daemon 的活动置顶顺序），并插入“今天/昨天/近七天/更早”分组头
   readonly property var groupedSessions: sb.buildGroupedSessions()
 
   function buildGroupedSessions() {
-    var now = Date.now()
+    function dayStart(x) { return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime() }
+    var today = dayStart(new Date())
     var arr = (sb.sessions || []).slice()
     arr.sort(function(a, b) {
       return (Date.parse(String(b.modifiedAt || "")) || 0) - (Date.parse(String(a.modifiedAt || "")) || 0)
     })
+    var groups = [
+      { labelKey: "sidebar.today", label: "今天" },
+      { labelKey: "sidebar.yesterday", label: "昨天" },
+      { labelKey: "sidebar.recent7", label: "近七天" },
+      { labelKey: "sidebar.earlier", label: "更早" }
+    ]
     var out = []
-    var group = -1 // 0=近七天 1=更早
+    var group = -1 // 0=今天 1=昨天 2=近七天 3=更早
     for (var i = 0; i < arr.length; i++) {
       var t = Date.parse(String(arr[i].modifiedAt || ""))
-      var g = (!isNaN(t) && now - t < 7 * 86400000) ? 0 : 1
+      var g = 3
+      if (!isNaN(t)) {
+        var days = Math.floor((today - dayStart(new Date(t))) / 86400000)
+        g = days <= 0 ? 0 : days === 1 ? 1 : days < 7 ? 2 : 3
+      }
       if (g !== group) {
         group = g
-        out.push({
-          header: true,
-          labelKey: g === 0 ? "sidebar.recent7" : "sidebar.earlier",
-          label: g === 0 ? "近七天" : "更早"
-        })
+        out.push({ header: true, labelKey: groups[g].labelKey, label: groups[g].label })
       }
       out.push(arr[i])
     }
@@ -211,7 +218,7 @@ Item {
           }
         }
 
-          // 会话列表（按 modifiedAt 倒序，近七天/更早分组）
+          // 会话列表（按 modifiedAt 倒序，今天/昨天/近七天/更早分组）
           ListView {
             id: list
             Layout.fillWidth: true
@@ -228,7 +235,7 @@ Item {
               width: list.width
               height: isHeader ? 20 : 48
 
-              // 分组头：近七天 / 更早
+              // 分组头：今天 / 昨天 / 近七天 / 更早
               Text {
                 visible: row.isHeader
                 x: 2
